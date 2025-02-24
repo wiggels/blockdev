@@ -1,0 +1,17 @@
+[package]
+name = "blockdev"
+version = "0.1.0"
+authors = ["Hunter Wigelsworth <wiggels@gmail.com>"]
+edition = "2024"
+description = "A Rust library for parsing and working with lsblk JSON output, providing type-safe block device representation and utilities for Linux"
+license = "MIT"
+repository = "https://github.com/wiggels/blockdev"
+homepage = "https://github.com/wiggels/blockdev"
+documentation = "https://docs.rs/blockdev"
+readme = "README.md"
+keywords = ["block", "lsblk", "json", "serde", "linux", "device"]
+categories = ["system-programming", "parsing"]
+
+[dependencies]
+serde = { version = "1.0.218", features = ["derive"] }
+serde_json = "1.0.139"
