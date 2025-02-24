@@ -3,6 +3,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use std::error::Error;
 use std::process::Command;
+use std::vec::IntoIter;
 
 /// Represents the entire JSON output produced by `lsblk --json`.
 #[derive(Serialize, Deserialize, Debug)]
@@ -117,6 +118,15 @@ impl BlockDevices {
             .iter()
             .filter(|device| !device.is_system())
             .collect()
+    }
+}
+
+impl IntoIterator for BlockDevices {
+    type Item = BlockDevice;
+    type IntoIter = IntoIter<BlockDevice>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.blockdevices.into_iter()
     }
 }
 
@@ -488,5 +498,39 @@ mod tests {
         let dev = get_devices().expect("Failed to get block devices");
         // This assertion is simplistic; adjust according to your environment's expected output.
         assert!(!dev.blockdevices.is_empty());
+    }
+    #[test]
+    fn test_into_iterator() {
+        // Create dummy BlockDevice instances.
+        let device1 = BlockDevice {
+            name: "sda".to_string(),
+            maj_min: "8:0".to_string(),
+            rm: false,
+            size: "500G".to_string(),
+            ro: false,
+            device_type: "disk".to_string(),
+            mountpoints: vec![None],
+            children: None,
+        };
+
+        let device2 = BlockDevice {
+            name: "sdb".to_string(),
+            maj_min: "8:16".to_string(),
+            rm: false,
+            size: "500G".to_string(),
+            ro: false,
+            device_type: "disk".to_string(),
+            mountpoints: vec![None],
+            children: None,
+        };
+
+        // Create a BlockDevices instance containing the two devices.
+        let devices = BlockDevices {
+            blockdevices: vec![device1, device2],
+        };
+
+        // Use the IntoIterator implementation to iterate over the devices.
+        let names: Vec<String> = devices.into_iter().map(|dev| dev.name).collect();
+        assert_eq!(names, vec!["sda".to_string(), "sdb".to_string()]);
     }
 }
