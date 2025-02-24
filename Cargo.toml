@@ -1,6 +1,6 @@
 [package]
 name = "blockdev"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Hunter Wigelsworth <wiggels@gmail.com>"]
 edition = "2024"
 description = "A Rust library for parsing and working with lsblk JSON output, providing type-safe block device representation and utilities for Linux"
