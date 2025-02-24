@@ -10,7 +10,7 @@ homepage = "https://github.com/wiggels/blockdev"
 documentation = "https://docs.rs/blockdev"
 readme = "README.md"
 keywords = ["block", "lsblk", "linux", "device"]
-categories = ["system-programming", "parsing"]
+categories = ["parsing"]
 
 [dependencies]
 serde = { version = "1.0.218", features = ["derive"] }
