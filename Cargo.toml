@@ -9,7 +9,7 @@ repository = "https://github.com/wiggels/blockdev"
 homepage = "https://github.com/wiggels/blockdev"
 documentation = "https://docs.rs/blockdev"
 readme = "README.md"
-keywords = ["block", "lsblk", "json", "serde", "linux", "device"]
+keywords = ["block", "lsblk", "linux", "device"]
 categories = ["system-programming", "parsing"]
 
 [dependencies]
