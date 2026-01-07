@@ -3,10 +3,11 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use std::error::Error;
 use std::process::Command;
+use std::slice::Iter;
 use std::vec::IntoIter;
 
 /// Represents the entire JSON output produced by `lsblk --json`.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
 pub struct BlockDevices {
     /// A vector of block devices.
     pub blockdevices: Vec<BlockDevice>,
@@ -51,14 +52,14 @@ where
 /// # Field Details
 ///
 /// - `name`: The device name.
-/// - `maj_min`: The device’s major and minor numbers. (Renamed from the JSON field "maj:min")
+/// - `maj_min`: The device's major and minor numbers. (Renamed from the JSON field "maj:min")
 /// - `rm`: Whether the device is removable.
 /// - `size`: The device size.
 /// - `ro`: Whether the device is read-only.
 /// - `device_type`: The device type (renamed from the reserved keyword "type").
 /// - `mountpoints`: A vector of mountpoints for the device. Uses a custom deserializer to support both single and multiple mountpoints.
 /// - `children`: Optional nested block devices.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct BlockDevice {
     /// The name of the block device.
     pub name: String,
@@ -93,8 +94,45 @@ pub struct BlockDevice {
 }
 
 impl BlockDevice {
+    /// Returns `true` if this device has any children.
+    #[must_use]
+    pub fn has_children(&self) -> bool {
+        self.children.as_ref().is_some_and(|c| !c.is_empty())
+    }
+
+    /// Returns an iterator over the children of this device.
+    ///
+    /// Returns an empty iterator if the device has no children.
+    pub fn children_iter(&self) -> impl Iterator<Item = &BlockDevice> {
+        self.children.iter().flat_map(|c| c.iter())
+    }
+
+    /// Finds a direct child device by name.
+    ///
+    /// Returns `None` if no child with the given name exists.
+    #[must_use]
+    pub fn find_child(&self, name: &str) -> Option<&BlockDevice> {
+        self.children.as_ref()?.iter().find(|c| c.name == name)
+    }
+
+    /// Returns all non-null mountpoints for this device.
+    #[must_use]
+    pub fn active_mountpoints(&self) -> Vec<&str> {
+        self.mountpoints
+            .iter()
+            .filter_map(|m| m.as_deref())
+            .collect()
+    }
+
+    /// Returns `true` if this device has at least one mountpoint.
+    #[must_use]
+    pub fn is_mounted(&self) -> bool {
+        self.mountpoints.iter().any(|m| m.is_some())
+    }
+
     /// Determines if this block device or any of its recursive children has a mountpoint of `/`,
     /// indicating a system mount.
+    #[must_use]
     pub fn is_system(&self) -> bool {
         if self.mountpoints.iter().any(|m| m.as_deref() == Some("/")) {
             return true;
@@ -108,16 +146,64 @@ impl BlockDevice {
         }
         false
     }
+
+    /// Returns `true` if this device is a disk (device_type == "disk").
+    #[must_use]
+    pub fn is_disk(&self) -> bool {
+        self.device_type == "disk"
+    }
+
+    /// Returns `true` if this device is a partition (device_type == "part").
+    #[must_use]
+    pub fn is_partition(&self) -> bool {
+        self.device_type == "part"
+    }
 }
 
 impl BlockDevices {
+    /// Returns the number of top-level block devices.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.blockdevices.len()
+    }
+
+    /// Returns `true` if there are no block devices.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.blockdevices.is_empty()
+    }
+
+    /// Returns an iterator over references to the block devices.
+    pub fn iter(&self) -> Iter<'_, BlockDevice> {
+        self.blockdevices.iter()
+    }
+
+    /// Returns a vector of references to `BlockDevice` entries that have a mountpoint
+    /// of `/` on them or on any of their recursive children.
+    #[must_use]
+    pub fn system(&self) -> Vec<&BlockDevice> {
+        self.blockdevices
+            .iter()
+            .filter(|device| device.is_system())
+            .collect()
+    }
+
     /// Returns a vector of references to `BlockDevice` entries that do not have a mountpoint
     /// of `/` on them or on any of their recursive children.
+    #[must_use]
     pub fn non_system(&self) -> Vec<&BlockDevice> {
         self.blockdevices
             .iter()
             .filter(|device| !device.is_system())
             .collect()
+    }
+
+    /// Finds a top-level block device by name.
+    ///
+    /// Returns `None` if no device with the given name exists.
+    #[must_use]
+    pub fn find_by_name(&self, name: &str) -> Option<&BlockDevice> {
+        self.blockdevices.iter().find(|d| d.name == name)
     }
 }
 
@@ -130,8 +216,20 @@ impl IntoIterator for BlockDevices {
     }
 }
 
+impl<'a> IntoIterator for &'a BlockDevices {
+    type Item = &'a BlockDevice;
+    type IntoIter = Iter<'a, BlockDevice>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.blockdevices.iter()
+    }
+}
+
 /// Parses a JSON string (produced by `lsblk --json`)
 /// into a `BlockDevices` struct.
+///
+/// This function is useful when you already have JSON data from `lsblk`
+/// and want to parse it without running the command again.
 ///
 /// # Arguments
 ///
@@ -140,7 +238,17 @@ impl IntoIterator for BlockDevices {
 /// # Errors
 ///
 /// Returns a `serde_json::Error` if the JSON cannot be parsed.
-fn parse_lsblk(json_data: &str) -> Result<BlockDevices, serde_json::Error> {
+///
+/// # Examples
+///
+/// ```
+/// use blockdev::parse_lsblk;
+///
+/// let json = r#"{"blockdevices": [{"name": "sda", "maj:min": "8:0", "rm": false, "size": "500G", "ro": false, "type": "disk", "mountpoints": [null]}]}"#;
+/// let devices = parse_lsblk(json).expect("Failed to parse JSON");
+/// assert_eq!(devices.len(), 1);
+/// ```
+pub fn parse_lsblk(json_data: &str) -> Result<BlockDevices, serde_json::Error> {
     serde_json::from_str(json_data)
 }
 
@@ -155,7 +263,7 @@ fn parse_lsblk(json_data: &str) -> Result<BlockDevices, serde_json::Error> {
 /// # Examples
 ///
 /// ```no_run
-/// # use blovkdev::get_devices;
+/// # use blockdev::get_devices;
 /// let devices = get_devices().expect("Failed to get block devices");
 /// ```
 pub fn get_devices() -> Result<BlockDevices, Box<dyn Error>> {
@@ -494,6 +602,7 @@ mod tests {
     /// Warning: This test will attempt to run the `lsblk` command on your system.
     /// It may fail if `lsblk` is not available or if the test environment does not permit running commands.
     #[test]
+    #[ignore = "requires lsblk command to be available on the system"]
     fn test_get_devices() {
         let dev = get_devices().expect("Failed to get block devices");
         // This assertion is simplistic; adjust according to your environment's expected output.
@@ -532,5 +641,280 @@ mod tests {
         // Use the IntoIterator implementation to iterate over the devices.
         let names: Vec<String> = devices.into_iter().map(|dev| dev.name).collect();
         assert_eq!(names, vec!["sda".to_string(), "sdb".to_string()]);
+    }
+
+    #[test]
+    fn test_empty_blockdevices() {
+        let json = r#"{"blockdevices": []}"#;
+        let devices = parse_lsblk(json).expect("Failed to parse empty JSON");
+        assert!(devices.is_empty());
+        assert_eq!(devices.len(), 0);
+        assert!(devices.non_system().is_empty());
+        assert!(devices.system().is_empty());
+        assert!(devices.find_by_name("sda").is_none());
+    }
+
+    #[test]
+    fn test_default_trait() {
+        let devices = BlockDevices::default();
+        assert!(devices.is_empty());
+        assert_eq!(devices.len(), 0);
+    }
+
+    #[test]
+    fn test_clone_trait() {
+        let json = r#"{"blockdevices": [{"name": "sda", "maj:min": "8:0", "rm": false, "size": "500G", "ro": false, "type": "disk", "mountpoints": [null]}]}"#;
+        let devices = parse_lsblk(json).expect("Failed to parse JSON");
+        let cloned = devices.clone();
+        assert_eq!(devices, cloned);
+        assert_eq!(cloned.len(), 1);
+    }
+
+    #[test]
+    fn test_serialization_roundtrip() {
+        let json = r#"{"blockdevices":[{"name":"sda","maj:min":"8:0","rm":false,"size":"500G","ro":false,"type":"disk","mountpoints":[null],"children":null}]}"#;
+        let devices = parse_lsblk(json).expect("Failed to parse JSON");
+        let serialized = serde_json::to_string(&devices).expect("Failed to serialize");
+        let deserialized: BlockDevices =
+            serde_json::from_str(&serialized).expect("Failed to deserialize");
+        assert_eq!(devices, deserialized);
+    }
+
+    #[test]
+    fn test_device_with_direct_root_mount() {
+        let json = r#"{
+            "blockdevices": [{
+                "name": "sda",
+                "maj:min": "8:0",
+                "rm": false,
+                "size": "500G",
+                "ro": false,
+                "type": "disk",
+                "mountpoints": ["/"]
+            }]
+        }"#;
+        let devices = parse_lsblk(json).expect("Failed to parse JSON");
+        let device = devices.find_by_name("sda").unwrap();
+        assert!(device.is_system());
+        assert!(device.is_mounted());
+        assert_eq!(device.active_mountpoints(), vec!["/"]);
+        assert_eq!(devices.system().len(), 1);
+        assert!(devices.non_system().is_empty());
+    }
+
+    #[test]
+    fn test_block_device_methods() {
+        let device = BlockDevice {
+            name: "sda".to_string(),
+            maj_min: "8:0".to_string(),
+            rm: false,
+            size: "500G".to_string(),
+            ro: false,
+            device_type: "disk".to_string(),
+            mountpoints: vec![Some("/mnt/data".to_string()), None],
+            children: Some(vec![BlockDevice {
+                name: "sda1".to_string(),
+                maj_min: "8:1".to_string(),
+                rm: false,
+                size: "250G".to_string(),
+                ro: false,
+                device_type: "part".to_string(),
+                mountpoints: vec![Some("/home".to_string())],
+                children: None,
+            }]),
+        };
+
+        assert!(device.is_disk());
+        assert!(!device.is_partition());
+        assert!(device.has_children());
+        assert!(device.is_mounted());
+        assert_eq!(device.active_mountpoints(), vec!["/mnt/data"]);
+
+        let child = device.find_child("sda1").unwrap();
+        assert!(!child.is_disk());
+        assert!(child.is_partition());
+        assert!(!child.has_children());
+
+        assert!(device.find_child("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_children_iter() {
+        let device = BlockDevice {
+            name: "sda".to_string(),
+            maj_min: "8:0".to_string(),
+            rm: false,
+            size: "500G".to_string(),
+            ro: false,
+            device_type: "disk".to_string(),
+            mountpoints: vec![None],
+            children: Some(vec![
+                BlockDevice {
+                    name: "sda1".to_string(),
+                    maj_min: "8:1".to_string(),
+                    rm: false,
+                    size: "250G".to_string(),
+                    ro: false,
+                    device_type: "part".to_string(),
+                    mountpoints: vec![None],
+                    children: None,
+                },
+                BlockDevice {
+                    name: "sda2".to_string(),
+                    maj_min: "8:2".to_string(),
+                    rm: false,
+                    size: "250G".to_string(),
+                    ro: false,
+                    device_type: "part".to_string(),
+                    mountpoints: vec![None],
+                    children: None,
+                },
+            ]),
+        };
+
+        let names: Vec<&str> = device.children_iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, vec!["sda1", "sda2"]);
+
+        // Test empty children iterator
+        let device_no_children = BlockDevice {
+            name: "sdb".to_string(),
+            maj_min: "8:16".to_string(),
+            rm: false,
+            size: "500G".to_string(),
+            ro: false,
+            device_type: "disk".to_string(),
+            mountpoints: vec![None],
+            children: None,
+        };
+        assert_eq!(device_no_children.children_iter().count(), 0);
+    }
+
+    #[test]
+    fn test_borrowing_iterator() {
+        let devices = BlockDevices {
+            blockdevices: vec![
+                BlockDevice {
+                    name: "sda".to_string(),
+                    maj_min: "8:0".to_string(),
+                    rm: false,
+                    size: "500G".to_string(),
+                    ro: false,
+                    device_type: "disk".to_string(),
+                    mountpoints: vec![None],
+                    children: None,
+                },
+                BlockDevice {
+                    name: "sdb".to_string(),
+                    maj_min: "8:16".to_string(),
+                    rm: false,
+                    size: "500G".to_string(),
+                    ro: false,
+                    device_type: "disk".to_string(),
+                    mountpoints: vec![None],
+                    children: None,
+                },
+            ],
+        };
+
+        // Test borrowing iterator (doesn't consume)
+        let names: Vec<&str> = (&devices).into_iter().map(|d| d.name.as_str()).collect();
+        assert_eq!(names, vec!["sda", "sdb"]);
+
+        // devices is still available
+        assert_eq!(devices.len(), 2);
+
+        // Test iter() method
+        let names2: Vec<&str> = devices.iter().map(|d| d.name.as_str()).collect();
+        assert_eq!(names2, vec!["sda", "sdb"]);
+    }
+
+    #[test]
+    fn test_find_by_name() {
+        let devices = BlockDevices {
+            blockdevices: vec![
+                BlockDevice {
+                    name: "sda".to_string(),
+                    maj_min: "8:0".to_string(),
+                    rm: false,
+                    size: "500G".to_string(),
+                    ro: false,
+                    device_type: "disk".to_string(),
+                    mountpoints: vec![None],
+                    children: None,
+                },
+                BlockDevice {
+                    name: "nvme0n1".to_string(),
+                    maj_min: "259:0".to_string(),
+                    rm: false,
+                    size: "1T".to_string(),
+                    ro: false,
+                    device_type: "disk".to_string(),
+                    mountpoints: vec![None],
+                    children: None,
+                },
+            ],
+        };
+
+        assert!(devices.find_by_name("sda").is_some());
+        assert_eq!(devices.find_by_name("sda").unwrap().size, "500G");
+        assert!(devices.find_by_name("nvme0n1").is_some());
+        assert!(devices.find_by_name("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_system_method() {
+        let json = r#"{
+            "blockdevices": [
+                {"name": "sda", "maj:min": "8:0", "rm": false, "size": "500G", "ro": false, "type": "disk", "mountpoints": ["/"]},
+                {"name": "sdb", "maj:min": "8:16", "rm": false, "size": "500G", "ro": false, "type": "disk", "mountpoints": [null]},
+                {"name": "sdc", "maj:min": "8:32", "rm": false, "size": "500G", "ro": false, "type": "disk", "mountpoints": ["/home"]}
+            ]
+        }"#;
+        let devices = parse_lsblk(json).expect("Failed to parse JSON");
+        let system = devices.system();
+        assert_eq!(system.len(), 1);
+        assert_eq!(system[0].name, "sda");
+    }
+
+    #[test]
+    fn test_multiple_mountpoints() {
+        let json = r#"{
+            "blockdevices": [{
+                "name": "sda",
+                "maj:min": "8:0",
+                "rm": false,
+                "size": "500G",
+                "ro": false,
+                "type": "disk",
+                "mountpoints": ["/mnt/data", "/mnt/backup", null]
+            }]
+        }"#;
+        let devices = parse_lsblk(json).expect("Failed to parse JSON");
+        let device = devices.find_by_name("sda").unwrap();
+        assert!(device.is_mounted());
+        assert_eq!(
+            device.active_mountpoints(),
+            vec!["/mnt/data", "/mnt/backup"]
+        );
+    }
+
+    #[test]
+    fn test_removable_and_readonly() {
+        let json = r#"{
+            "blockdevices": [{
+                "name": "sr0",
+                "maj:min": "11:0",
+                "rm": true,
+                "size": "4.7G",
+                "ro": true,
+                "type": "rom",
+                "mountpoints": [null]
+            }]
+        }"#;
+        let devices = parse_lsblk(json).expect("Failed to parse JSON");
+        let device = devices.find_by_name("sr0").unwrap();
+        assert!(device.rm);
+        assert!(device.ro);
+        assert_eq!(device.device_type, "rom");
     }
 }
