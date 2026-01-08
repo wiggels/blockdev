@@ -1,10 +1,31 @@
 use serde::de::Error as DeError;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
-use std::error::Error;
 use std::process::Command;
 use std::slice::Iter;
+use std::string::FromUtf8Error;
 use std::vec::IntoIter;
+use thiserror::Error;
+
+/// Error type for blockdev operations.
+#[derive(Debug, Error)]
+pub enum BlockDevError {
+    /// The lsblk command failed to execute.
+    #[error("failed to execute lsblk: {0}")]
+    CommandFailed(#[from] std::io::Error),
+
+    /// The lsblk command returned a non-zero exit status.
+    #[error("lsblk returned error: {0}")]
+    LsblkError(String),
+
+    /// The output from lsblk was not valid UTF-8.
+    #[error("invalid UTF-8 in lsblk output: {0}")]
+    InvalidUtf8(#[from] FromUtf8Error),
+
+    /// Failed to parse the JSON output from lsblk.
+    #[error("failed to parse lsblk JSON: {0}")]
+    JsonParse(#[from] serde_json::Error),
+}
 
 /// Represents the entire JSON output produced by `lsblk --json`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
@@ -266,11 +287,13 @@ pub fn parse_lsblk(json_data: &str) -> Result<BlockDevices, serde_json::Error> {
 /// # use blockdev::get_devices;
 /// let devices = get_devices().expect("Failed to get block devices");
 /// ```
-pub fn get_devices() -> Result<BlockDevices, Box<dyn Error>> {
+pub fn get_devices() -> Result<BlockDevices, BlockDevError> {
     let output = Command::new("lsblk").arg("--json").output()?;
 
     if !output.status.success() {
-        return Err(format!("lsblk failed: {}", String::from_utf8_lossy(&output.stderr)).into());
+        return Err(BlockDevError::LsblkError(
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+        ));
     }
 
     let json_output = String::from_utf8(output.stdout)?;
