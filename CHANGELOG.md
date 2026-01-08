@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 
 
+## [0.3.1](https://github.com/wiggels/blockdev/compare/v0.3.0...0.3.1) - 2026-01-08
+
+- 🐛 Update readme and fix cliff links ([015b24f](https://github.com/wiggels/blockdev/commit/015b24f15d0abe87e50af8778ee97c2091363d57))
+
 ## [0.3.0](https://github.com/wiggels/blockdev/compare/v0.2.1...v0.3.0) - 2026-01-08
 
 - ⛰️ Parse maj_min into MajMin struct with major/minor fields ([f611f02](https://github.com/wiggels/blockdev/commit/f611f02207736f9fbe0e140b48c43d7da2a11b96))
