@@ -7,6 +7,37 @@ use std::string::FromUtf8Error;
 use std::vec::IntoIter;
 use thiserror::Error;
 
+/// Represents the type of a block device.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[serde(rename_all = "lowercase")]
+pub enum DeviceType {
+    /// A physical disk device.
+    Disk,
+    /// A partition on a disk.
+    Part,
+    /// A loop device.
+    Loop,
+    /// A RAID1 (mirroring) device.
+    Raid1,
+    /// A RAID5 device.
+    Raid5,
+    /// A RAID6 device.
+    Raid6,
+    /// A RAID0 (striping) device.
+    Raid0,
+    /// A RAID10 device.
+    Raid10,
+    /// An LVM logical volume.
+    Lvm,
+    /// A device mapper crypt device.
+    Crypt,
+    /// A ROM device (e.g., CD/DVD drive).
+    Rom,
+    /// An unknown or unsupported device type.
+    #[serde(other)]
+    Other,
+}
+
 /// Error type for blockdev operations.
 #[derive(Debug, Error)]
 pub enum BlockDevError {
@@ -147,7 +178,7 @@ pub struct BlockDevice {
     ///
     /// The JSON field is `"type"`, which is a reserved keyword in Rust. It is renamed to `device_type`.
     #[serde(rename = "type")]
-    pub device_type: String,
+    pub device_type: DeviceType,
     /// The mountpoints of the device.
     ///
     /// Uses a custom deserializer to handle both a single mountpoint (possibly null) and an array of mountpoints.
@@ -216,16 +247,16 @@ impl BlockDevice {
         false
     }
 
-    /// Returns `true` if this device is a disk (device_type == "disk").
+    /// Returns `true` if this device is a disk.
     #[must_use]
     pub fn is_disk(&self) -> bool {
-        self.device_type == "disk"
+        self.device_type == DeviceType::Disk
     }
 
-    /// Returns `true` if this device is a partition (device_type == "part").
+    /// Returns `true` if this device is a partition.
     #[must_use]
     pub fn is_partition(&self) -> bool {
-        self.device_type == "part"
+        self.device_type == DeviceType::Part
     }
 }
 
@@ -691,7 +722,7 @@ mod tests {
             rm: false,
             size: 536_870_912_000, // 500G in bytes
             ro: false,
-            device_type: "disk".to_string(),
+            device_type: DeviceType::Disk,
             mountpoints: vec![None],
             children: None,
         };
@@ -702,7 +733,7 @@ mod tests {
             rm: false,
             size: 536_870_912_000, // 500G in bytes
             ro: false,
-            device_type: "disk".to_string(),
+            device_type: DeviceType::Disk,
             mountpoints: vec![None],
             children: None,
         };
@@ -784,7 +815,7 @@ mod tests {
             rm: false,
             size: 536_870_912_000, // 500G in bytes
             ro: false,
-            device_type: "disk".to_string(),
+            device_type: DeviceType::Disk,
             mountpoints: vec![Some("/mnt/data".to_string()), None],
             children: Some(vec![BlockDevice {
                 name: "sda1".to_string(),
@@ -792,7 +823,7 @@ mod tests {
                 rm: false,
                 size: 268_435_456_000, // 250G in bytes
                 ro: false,
-                device_type: "part".to_string(),
+                device_type: DeviceType::Part,
                 mountpoints: vec![Some("/home".to_string())],
                 children: None,
             }]),
@@ -820,7 +851,7 @@ mod tests {
             rm: false,
             size: 536_870_912_000, // 500G in bytes
             ro: false,
-            device_type: "disk".to_string(),
+            device_type: DeviceType::Disk,
             mountpoints: vec![None],
             children: Some(vec![
                 BlockDevice {
@@ -829,7 +860,7 @@ mod tests {
                     rm: false,
                     size: 268_435_456_000, // 250G in bytes
                     ro: false,
-                    device_type: "part".to_string(),
+                    device_type: DeviceType::Part,
                     mountpoints: vec![None],
                     children: None,
                 },
@@ -839,7 +870,7 @@ mod tests {
                     rm: false,
                     size: 268_435_456_000, // 250G in bytes
                     ro: false,
-                    device_type: "part".to_string(),
+                    device_type: DeviceType::Part,
                     mountpoints: vec![None],
                     children: None,
                 },
@@ -856,7 +887,7 @@ mod tests {
             rm: false,
             size: 536_870_912_000, // 500G in bytes
             ro: false,
-            device_type: "disk".to_string(),
+            device_type: DeviceType::Disk,
             mountpoints: vec![None],
             children: None,
         };
@@ -873,7 +904,7 @@ mod tests {
                     rm: false,
                     size: 536_870_912_000, // 500G in bytes
                     ro: false,
-                    device_type: "disk".to_string(),
+                    device_type: DeviceType::Disk,
                     mountpoints: vec![None],
                     children: None,
                 },
@@ -883,7 +914,7 @@ mod tests {
                     rm: false,
                     size: 536_870_912_000, // 500G in bytes
                     ro: false,
-                    device_type: "disk".to_string(),
+                    device_type: DeviceType::Disk,
                     mountpoints: vec![None],
                     children: None,
                 },
@@ -912,7 +943,7 @@ mod tests {
                     rm: false,
                     size: 536_870_912_000, // 500G in bytes
                     ro: false,
-                    device_type: "disk".to_string(),
+                    device_type: DeviceType::Disk,
                     mountpoints: vec![None],
                     children: None,
                 },
@@ -922,7 +953,7 @@ mod tests {
                     rm: false,
                     size: 1_099_511_627_776, // 1T in bytes
                     ro: false,
-                    device_type: "disk".to_string(),
+                    device_type: DeviceType::Disk,
                     mountpoints: vec![None],
                     children: None,
                 },
@@ -989,6 +1020,6 @@ mod tests {
         let device = devices.find_by_name("sr0").unwrap();
         assert!(device.rm);
         assert!(device.ro);
-        assert_eq!(device.device_type, "rom");
+        assert_eq!(device.device_type, DeviceType::Rom);
     }
 }
