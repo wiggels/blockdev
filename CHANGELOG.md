@@ -3,8 +3,16 @@
 All notable changes to this project will be documented in this file.
 
 
-## [0.2.1](https://github.com/wiggels/blockdev/-/compare/v0.2.0..0.2.1) - 2026-01-08
+## [0.3.0](https://github.com/wiggels/blockdev/-/compare/v0.2.1..0.3.0) - 2026-01-08
 
+- ⛰️ Parse maj_min into MajMin struct with major/minor fields ([f611f02](https://github.com/wiggels/blockdev/-/commit/f611f02207736f9fbe0e140b48c43d7da2a11b96))
+- ⛰️ Replace device_type String with DeviceType enum ([8e89660](https://github.com/wiggels/blockdev/-/commit/8e89660af78f935be4f2eb2c8c0e09536c432302))
+- ⛰️ Parse size as bytes (u64) instead of string ([477af6e](https://github.com/wiggels/blockdev/-/commit/477af6e36f7400eee6e0431d28f2a9728dc817c4))
+- ⛰️ Replace Box<dyn Error> with custom BlockDevError type ([bdbd46a](https://github.com/wiggels/blockdev/-/commit/bdbd46a6861141a4159e0b86aa2fc917887f5045))
+
+## [0.2.1](https://github.com/wiggels/blockdev/-/compare/v0.2.0..v0.2.1) - 2026-01-08
+
+- 🏗️ Release blockdev version 0.2.1 ([761c6dd](https://github.com/wiggels/blockdev/-/commit/761c6dd8896c4ca1b9bc198d815c684c96263564))
 - 🐛 Fix changelog generation ([fc7d1aa](https://github.com/wiggels/blockdev/-/commit/fc7d1aa411804fa09cfa87b173cee5bfc5bbb734))
 
 ## [0.2.0](https://github.com/wiggels/blockdev/-/compare/v0.1.2..v0.2.0) - 2026-01-08
