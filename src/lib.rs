@@ -7,6 +7,52 @@ use std::string::FromUtf8Error;
 use std::vec::IntoIter;
 use thiserror::Error;
 
+/// Represents the major and minor device numbers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct MajMin {
+    /// The major device number.
+    pub major: u32,
+    /// The minor device number.
+    pub minor: u32,
+}
+
+impl Serialize for MajMin {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&format!("{}:{}", self.major, self.minor))
+    }
+}
+
+impl<'de> Deserialize<'de> for MajMin {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let parts: Vec<&str> = s.split(':').collect();
+        if parts.len() != 2 {
+            return Err(DeError::custom(format!(
+                "invalid maj:min format: expected 'major:minor', got '{s}'"
+            )));
+        }
+        let major = parts[0]
+            .parse()
+            .map_err(|_| DeError::custom(format!("invalid major number: {}", parts[0])))?;
+        let minor = parts[1]
+            .parse()
+            .map_err(|_| DeError::custom(format!("invalid minor number: {}", parts[1])))?;
+        Ok(MajMin { major, minor })
+    }
+}
+
+impl std::fmt::Display for MajMin {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.major, self.minor)
+    }
+}
+
 /// Represents the type of a block device.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
@@ -166,7 +212,7 @@ pub struct BlockDevice {
     ///
     /// This field corresponds to the JSON field `"maj:min"`.
     #[serde(rename = "maj:min")]
-    pub maj_min: String,
+    pub maj_min: MajMin,
     /// Indicates if the device is removable.
     pub rm: bool,
     /// The size of the block device in bytes.
@@ -500,10 +546,6 @@ mod tests {
         // Verify that required fields are non-empty.
         for device in &lsblk.blockdevices {
             assert!(!device.name.is_empty(), "Device name should not be empty");
-            assert!(
-                !device.maj_min.is_empty(),
-                "Device maj:min should not be empty"
-            );
         }
 
         // Pick a device with nested children and validate details.
@@ -718,7 +760,7 @@ mod tests {
         // Create dummy BlockDevice instances.
         let device1 = BlockDevice {
             name: "sda".to_string(),
-            maj_min: "8:0".to_string(),
+            maj_min: MajMin { major: 8, minor: 0 },
             rm: false,
             size: 536_870_912_000, // 500G in bytes
             ro: false,
@@ -729,7 +771,7 @@ mod tests {
 
         let device2 = BlockDevice {
             name: "sdb".to_string(),
-            maj_min: "8:16".to_string(),
+            maj_min: MajMin { major: 8, minor: 16 },
             rm: false,
             size: 536_870_912_000, // 500G in bytes
             ro: false,
@@ -811,7 +853,7 @@ mod tests {
     fn test_block_device_methods() {
         let device = BlockDevice {
             name: "sda".to_string(),
-            maj_min: "8:0".to_string(),
+            maj_min: MajMin { major: 8, minor: 0 },
             rm: false,
             size: 536_870_912_000, // 500G in bytes
             ro: false,
@@ -819,7 +861,7 @@ mod tests {
             mountpoints: vec![Some("/mnt/data".to_string()), None],
             children: Some(vec![BlockDevice {
                 name: "sda1".to_string(),
-                maj_min: "8:1".to_string(),
+                maj_min: MajMin { major: 8, minor: 1 },
                 rm: false,
                 size: 268_435_456_000, // 250G in bytes
                 ro: false,
@@ -847,7 +889,7 @@ mod tests {
     fn test_children_iter() {
         let device = BlockDevice {
             name: "sda".to_string(),
-            maj_min: "8:0".to_string(),
+            maj_min: MajMin { major: 8, minor: 0 },
             rm: false,
             size: 536_870_912_000, // 500G in bytes
             ro: false,
@@ -856,7 +898,7 @@ mod tests {
             children: Some(vec![
                 BlockDevice {
                     name: "sda1".to_string(),
-                    maj_min: "8:1".to_string(),
+                    maj_min: MajMin { major: 8, minor: 1 },
                     rm: false,
                     size: 268_435_456_000, // 250G in bytes
                     ro: false,
@@ -866,7 +908,7 @@ mod tests {
                 },
                 BlockDevice {
                     name: "sda2".to_string(),
-                    maj_min: "8:2".to_string(),
+                    maj_min: MajMin { major: 8, minor: 2 },
                     rm: false,
                     size: 268_435_456_000, // 250G in bytes
                     ro: false,
@@ -883,7 +925,7 @@ mod tests {
         // Test empty children iterator
         let device_no_children = BlockDevice {
             name: "sdb".to_string(),
-            maj_min: "8:16".to_string(),
+            maj_min: MajMin { major: 8, minor: 16 },
             rm: false,
             size: 536_870_912_000, // 500G in bytes
             ro: false,
@@ -900,7 +942,7 @@ mod tests {
             blockdevices: vec![
                 BlockDevice {
                     name: "sda".to_string(),
-                    maj_min: "8:0".to_string(),
+                    maj_min: MajMin { major: 8, minor: 0 },
                     rm: false,
                     size: 536_870_912_000, // 500G in bytes
                     ro: false,
@@ -910,7 +952,7 @@ mod tests {
                 },
                 BlockDevice {
                     name: "sdb".to_string(),
-                    maj_min: "8:16".to_string(),
+                    maj_min: MajMin { major: 8, minor: 16 },
                     rm: false,
                     size: 536_870_912_000, // 500G in bytes
                     ro: false,
@@ -939,7 +981,7 @@ mod tests {
             blockdevices: vec![
                 BlockDevice {
                     name: "sda".to_string(),
-                    maj_min: "8:0".to_string(),
+                    maj_min: MajMin { major: 8, minor: 0 },
                     rm: false,
                     size: 536_870_912_000, // 500G in bytes
                     ro: false,
@@ -949,7 +991,7 @@ mod tests {
                 },
                 BlockDevice {
                     name: "nvme0n1".to_string(),
-                    maj_min: "259:0".to_string(),
+                    maj_min: MajMin { major: 259, minor: 0 },
                     rm: false,
                     size: 1_099_511_627_776, // 1T in bytes
                     ro: false,
