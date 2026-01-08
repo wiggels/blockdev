@@ -34,6 +34,53 @@ pub struct BlockDevices {
     pub blockdevices: Vec<BlockDevice>,
 }
 
+/// Parses a human-readable size string (e.g., "500G", "3.5T") into bytes.
+fn parse_size_string(s: &str) -> Option<u64> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+
+    // Find where the numeric part ends and the suffix begins
+    let (num_part, suffix) = {
+        let idx = s
+            .find(|c: char| !c.is_ascii_digit() && c != '.')
+            .unwrap_or(s.len());
+        (&s[..idx], s[idx..].trim())
+    };
+
+    let num: f64 = num_part.parse().ok()?;
+    let multiplier: u64 = match suffix.to_uppercase().as_str() {
+        "" | "B" => 1,
+        "K" | "KB" | "KIB" => 1024,
+        "M" | "MB" | "MIB" => 1024 * 1024,
+        "G" | "GB" | "GIB" => 1024 * 1024 * 1024,
+        "T" | "TB" | "TIB" => 1024 * 1024 * 1024 * 1024,
+        "P" | "PB" | "PIB" => 1024 * 1024 * 1024 * 1024 * 1024,
+        _ => return None,
+    };
+
+    Some((num * multiplier as f64) as u64)
+}
+
+/// Custom deserializer that handles both numeric byte values and human-readable size strings.
+fn deserialize_size<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Value::deserialize(deserializer)?;
+    match &value {
+        Value::Number(n) => n
+            .as_u64()
+            .or_else(|| n.as_f64().map(|f| f as u64))
+            .ok_or_else(|| DeError::custom("invalid numeric size")),
+        Value::String(s) => {
+            parse_size_string(s).ok_or_else(|| DeError::custom(format!("invalid size string: {s}")))
+        }
+        _ => Err(DeError::custom("size must be a number or string")),
+    }
+}
+
 /// Custom deserializer that supports both a single mountpoint (which may be null)
 /// and an array of mountpoints.
 ///
@@ -91,8 +138,9 @@ pub struct BlockDevice {
     pub maj_min: String,
     /// Indicates if the device is removable.
     pub rm: bool,
-    /// The size of the block device.
-    pub size: String,
+    /// The size of the block device in bytes.
+    #[serde(deserialize_with = "deserialize_size")]
+    pub size: u64,
     /// Indicates if the device is read-only.
     pub ro: bool,
     /// The type of the block device.
@@ -288,7 +336,10 @@ pub fn parse_lsblk(json_data: &str) -> Result<BlockDevices, serde_json::Error> {
 /// let devices = get_devices().expect("Failed to get block devices");
 /// ```
 pub fn get_devices() -> Result<BlockDevices, BlockDevError> {
-    let output = Command::new("lsblk").arg("--json").output()?;
+    let output = Command::new("lsblk")
+        .arg("--json")
+        .arg("--bytes")
+        .output()?;
 
     if !output.status.success() {
         return Err(BlockDevError::LsblkError(
@@ -638,7 +689,7 @@ mod tests {
             name: "sda".to_string(),
             maj_min: "8:0".to_string(),
             rm: false,
-            size: "500G".to_string(),
+            size: 536_870_912_000, // 500G in bytes
             ro: false,
             device_type: "disk".to_string(),
             mountpoints: vec![None],
@@ -649,7 +700,7 @@ mod tests {
             name: "sdb".to_string(),
             maj_min: "8:16".to_string(),
             rm: false,
-            size: "500G".to_string(),
+            size: 536_870_912_000, // 500G in bytes
             ro: false,
             device_type: "disk".to_string(),
             mountpoints: vec![None],
@@ -731,7 +782,7 @@ mod tests {
             name: "sda".to_string(),
             maj_min: "8:0".to_string(),
             rm: false,
-            size: "500G".to_string(),
+            size: 536_870_912_000, // 500G in bytes
             ro: false,
             device_type: "disk".to_string(),
             mountpoints: vec![Some("/mnt/data".to_string()), None],
@@ -739,7 +790,7 @@ mod tests {
                 name: "sda1".to_string(),
                 maj_min: "8:1".to_string(),
                 rm: false,
-                size: "250G".to_string(),
+                size: 268_435_456_000, // 250G in bytes
                 ro: false,
                 device_type: "part".to_string(),
                 mountpoints: vec![Some("/home".to_string())],
@@ -767,7 +818,7 @@ mod tests {
             name: "sda".to_string(),
             maj_min: "8:0".to_string(),
             rm: false,
-            size: "500G".to_string(),
+            size: 536_870_912_000, // 500G in bytes
             ro: false,
             device_type: "disk".to_string(),
             mountpoints: vec![None],
@@ -776,7 +827,7 @@ mod tests {
                     name: "sda1".to_string(),
                     maj_min: "8:1".to_string(),
                     rm: false,
-                    size: "250G".to_string(),
+                    size: 268_435_456_000, // 250G in bytes
                     ro: false,
                     device_type: "part".to_string(),
                     mountpoints: vec![None],
@@ -786,7 +837,7 @@ mod tests {
                     name: "sda2".to_string(),
                     maj_min: "8:2".to_string(),
                     rm: false,
-                    size: "250G".to_string(),
+                    size: 268_435_456_000, // 250G in bytes
                     ro: false,
                     device_type: "part".to_string(),
                     mountpoints: vec![None],
@@ -803,7 +854,7 @@ mod tests {
             name: "sdb".to_string(),
             maj_min: "8:16".to_string(),
             rm: false,
-            size: "500G".to_string(),
+            size: 536_870_912_000, // 500G in bytes
             ro: false,
             device_type: "disk".to_string(),
             mountpoints: vec![None],
@@ -820,7 +871,7 @@ mod tests {
                     name: "sda".to_string(),
                     maj_min: "8:0".to_string(),
                     rm: false,
-                    size: "500G".to_string(),
+                    size: 536_870_912_000, // 500G in bytes
                     ro: false,
                     device_type: "disk".to_string(),
                     mountpoints: vec![None],
@@ -830,7 +881,7 @@ mod tests {
                     name: "sdb".to_string(),
                     maj_min: "8:16".to_string(),
                     rm: false,
-                    size: "500G".to_string(),
+                    size: 536_870_912_000, // 500G in bytes
                     ro: false,
                     device_type: "disk".to_string(),
                     mountpoints: vec![None],
@@ -859,7 +910,7 @@ mod tests {
                     name: "sda".to_string(),
                     maj_min: "8:0".to_string(),
                     rm: false,
-                    size: "500G".to_string(),
+                    size: 536_870_912_000, // 500G in bytes
                     ro: false,
                     device_type: "disk".to_string(),
                     mountpoints: vec![None],
@@ -869,7 +920,7 @@ mod tests {
                     name: "nvme0n1".to_string(),
                     maj_min: "259:0".to_string(),
                     rm: false,
-                    size: "1T".to_string(),
+                    size: 1_099_511_627_776, // 1T in bytes
                     ro: false,
                     device_type: "disk".to_string(),
                     mountpoints: vec![None],
@@ -879,7 +930,7 @@ mod tests {
         };
 
         assert!(devices.find_by_name("sda").is_some());
-        assert_eq!(devices.find_by_name("sda").unwrap().size, "500G");
+        assert_eq!(devices.find_by_name("sda").unwrap().size, 536_870_912_000);
         assert!(devices.find_by_name("nvme0n1").is_some());
         assert!(devices.find_by_name("nonexistent").is_none());
     }
