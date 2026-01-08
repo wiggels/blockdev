@@ -23,16 +23,16 @@ body = """
     {% if commit.scope %}*({{ commit.scope }})* {% endif %}\
         {% if commit.breaking %}[**breaking**] {% endif %}\
         {{ commit.message | split(pat="\n") | first | upper_first }} \
-        ([{{ commit.id | truncate(length=7, end="") }}]({{ self::remote_url() }}/-/commit/{{ commit.id }}))
+        ([{{ commit.id | truncate(length=7, end="") }}]({{ self::remote_url() }}/commit/{{ commit.id }}))
 {% endmacro -%}
 
 {%- if version %}
     {% if previous.version %}\
         ## [{{ version | trim_start_matches(pat="v") }}]\
-          ({{ self::remote_url() }}/-/compare/{{ previous.version }}..{{ version }}) - {{ timestamp | date(format="%Y-%m-%d") }}
+          ({{ self::remote_url() }}/compare/{{ previous.version }}...{{ version }}) - {{ timestamp | date(format="%Y-%m-%d") }}
     {% else %}\
         ## [{{ version | trim_start_matches(pat="v") }}]\
-        ({{ self::remote_url() }}/-/commits/{{ version }}) - {{ timestamp | date(format="%Y-%m-%d") }}
+        ({{ self::remote_url() }}/releases/tag/{{ version }}) - {{ timestamp | date(format="%Y-%m-%d") }}
     {% endif %}
 {% else %}\
     ## [unreleased]
@@ -92,7 +92,7 @@ commit_parsers = [
   { message = "(?i)revert", group = "<!-- 0 -->↩️" },
   { message = "(?i)refactor|lint|clippy", group = "<!-- 0 -->🚜" },
   { message = "(?i)test|coverage", group = "<!-- 0 -->🧪" },
-  { message = "(?i)\\<ci\\>|gitlab", group = "<!-- 0 -->🦊" },
+  { message = "(?i)\\<ci\\>|github|actions", group = "<!-- 0 -->🦊" },
   { message = "(?i)dependenc(y|ies)|package|rust|cargo|crate|bump.*rust", group = "<!-- 0 -->📦" },
   { message = "(?i)doc", group = "<!-- 0 -->📚" },
   { message = "(?i)perf", group = "<!-- 0 -->🏎️" },
