@@ -9,7 +9,7 @@
 [changelog]
 # template for the changelog header
 header = """
-# Blockdev Library Changelog\n
+# Blockdev Changelog\n
 All notable changes to this project will be documented in this file.\n
 """
 # template for the changelog body
