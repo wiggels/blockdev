@@ -3,8 +3,13 @@
 All notable changes to this project will be documented in this file.
 
 
-## [0.3.1](https://github.com/wiggels/blockdev/compare/v0.3.0...0.3.1) - 2026-01-08
+## [0.4.0](https://github.com/wiggels/blockdev/compare/v0.3.1...0.4.0) - 2026-05-14
 
+- ⛰️ Add more tests/benches and fix perf ([653e4f5](https://github.com/wiggels/blockdev/commit/653e4f5c079a00b992514fa5e33b940a3cf365fa))
+
+## [0.3.1](https://github.com/wiggels/blockdev/compare/v0.3.0...v0.3.1) - 2026-01-08
+
+- 🏗️ Release blockdev version 0.3.1 ([8cd65c0](https://github.com/wiggels/blockdev/commit/8cd65c0fefd5780085dbee33cbb770520eee8175))
 - 🐛 Update readme and fix cliff links ([015b24f](https://github.com/wiggels/blockdev/commit/015b24f15d0abe87e50af8778ee97c2091363d57))
 
 ## [0.3.0](https://github.com/wiggels/blockdev/compare/v0.2.1...v0.3.0) - 2026-01-08
