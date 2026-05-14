@@ -1,0 +1,42 @@
+{
+  "blockdevices": [
+    {
+      "name": "nvme0n1",
+      "maj:min": "259:0",
+      "rm": false,
+      "size": 8589934592,
+      "ro": false,
+      "type": "disk",
+      "mountpoints": [null],
+      "children": [
+        {
+          "name": "nvme0n1p1",
+          "maj:min": "259:1",
+          "rm": false,
+          "size": 8588886016,
+          "ro": false,
+          "type": "part",
+          "mountpoints": ["/"]
+        }
+      ]
+    },
+    {
+      "name": "nvme1n1",
+      "maj:min": "259:2",
+      "rm": false,
+      "size": 1875385008128,
+      "ro": false,
+      "type": "disk",
+      "mountpoints": [null]
+    },
+    {
+      "name": "nvme2n1",
+      "maj:min": "259:3",
+      "rm": false,
+      "size": 1875385008128,
+      "ro": false,
+      "type": "disk",
+      "mountpoints": [null]
+    }
+  ]
+}

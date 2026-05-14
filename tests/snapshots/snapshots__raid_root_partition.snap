@@ -1,0 +1,12 @@
+---
+source: tests/snapshots.rs
+expression: "(system, non_system)"
+---
+[
+  [
+    "sda"
+  ],
+  [
+    "nvme0n1"
+  ]
+]

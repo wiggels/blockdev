@@ -1,0 +1,11 @@
+---
+source: tests/snapshots.rs
+expression: summary(&parsed)
+---
+[
+  "sda [disk] 8:0 size=480069969510 rm=false ro=false mounts=[] system=true",
+  "sda1 [part] 8:1 size=536870912 rm=false ro=false mounts=[\"/boot/efi\"] system=true",
+  "sda2 [part] 8:2 size=479533098598 rm=false ro=false mounts=[] system=true",
+  "md0 [raid1] 9:0 size=479533098598 rm=false ro=false mounts=[\"/\"] system=true",
+  "nvme0n1 [disk] 259:0 size=1869169767219 rm=false ro=false mounts=[] system=false"
+]

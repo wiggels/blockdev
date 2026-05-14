@@ -1,0 +1,8 @@
+---
+source: tests/snapshots.rs
+expression: names
+---
+[
+  "vg0-root",
+  "vg0-home"
+]

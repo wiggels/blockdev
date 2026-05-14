@@ -1,0 +1,8 @@
+---
+source: tests/snapshots.rs
+expression: candidates
+---
+[
+  "nvme1n1",
+  "nvme2n1"
+]

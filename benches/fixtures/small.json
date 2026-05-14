@@ -1,0 +1,96 @@
+{
+    "blockdevices": [
+        {"name":"nvme1n1", "maj:min":"259:0", "rm":false, "size":"3.5T", "ro":false, "type":"disk", "mountpoint":null,
+            "children": [
+                {"name":"nvme1n1p1", "maj:min":"259:1", "rm":false, "size":"3.5T", "ro":false, "type":"part", "mountpoint":null},
+                {"name":"nvme1n1p9", "maj:min":"259:2", "rm":false, "size":"8M", "ro":false, "type":"part", "mountpoint":null}
+            ]
+        },
+        {"name":"nvme7n1", "maj:min":"259:3", "rm":false, "size":"3.5T", "ro":false, "type":"disk", "mountpoint":null,
+            "children": [
+                {"name":"nvme7n1p1", "maj:min":"259:7", "rm":false, "size":"3.5T", "ro":false, "type":"part", "mountpoint":null},
+                {"name":"nvme7n1p9", "maj:min":"259:8", "rm":false, "size":"8M", "ro":false, "type":"part", "mountpoint":null}
+            ]
+        },
+        {"name":"nvme5n1", "maj:min":"259:4", "rm":false, "size":"3.5T", "ro":false, "type":"disk", "mountpoint":null,
+            "children": [
+                {"name":"nvme5n1p1", "maj:min":"259:5", "rm":false, "size":"3.5T", "ro":false, "type":"part", "mountpoint":null},
+                {"name":"nvme5n1p9", "maj:min":"259:6", "rm":false, "size":"8M", "ro":false, "type":"part", "mountpoint":null}
+            ]
+        },
+        {"name":"nvme9n1", "maj:min":"259:9", "rm":false, "size":"3.5T", "ro":false, "type":"disk", "mountpoint":null,
+            "children": [
+                {"name":"nvme9n1p1", "maj:min":"259:13", "rm":false, "size":"3.5T", "ro":false, "type":"part", "mountpoint":null},
+                {"name":"nvme9n1p9", "maj:min":"259:14", "rm":false, "size":"8M", "ro":false, "type":"part", "mountpoint":null}
+            ]
+        },
+        {"name":"nvme4n1", "maj:min":"259:10", "rm":false, "size":"3.5T", "ro":false, "type":"disk", "mountpoint":null,
+            "children": [
+                {"name":"nvme4n1p1", "maj:min":"259:11", "rm":false, "size":"3.5T", "ro":false, "type":"part", "mountpoint":null},
+                {"name":"nvme4n1p9", "maj:min":"259:12", "rm":false, "size":"8M", "ro":false, "type":"part", "mountpoint":null}
+            ]
+        },
+        {"name":"nvme8n1", "maj:min":"259:15", "rm":false, "size":"3.5T", "ro":false, "type":"disk", "mountpoint":null,
+            "children": [
+                {"name":"nvme8n1p1", "maj:min":"259:20", "rm":false, "size":"3.5T", "ro":false, "type":"part", "mountpoint":null},
+                {"name":"nvme8n1p9", "maj:min":"259:21", "rm":false, "size":"8M", "ro":false, "type":"part", "mountpoint":null}
+            ]
+        },
+        {"name":"nvme6n1", "maj:min":"259:16", "rm":false, "size":"3.5T", "ro":false, "type":"disk", "mountpoint":null,
+            "children": [
+                {"name":"nvme6n1p1", "maj:min":"259:17", "rm":false, "size":"3.5T", "ro":false, "type":"part", "mountpoint":null},
+                {"name":"nvme6n1p9", "maj:min":"259:18", "rm":false, "size":"8M", "ro":false, "type":"part", "mountpoint":null}
+            ]
+        },
+        {"name":"nvme3n1", "maj:min":"259:19", "rm":false, "size":"894.3G", "ro":false, "type":"disk", "mountpoint":null,
+            "children": [
+                {"name":"nvme3n1p1", "maj:min":"259:23", "rm":false, "size":"1M", "ro":false, "type":"part", "mountpoint":null},
+                {"name":"nvme3n1p2", "maj:min":"259:24", "rm":false, "size":"244M", "ro":false, "type":"part", "mountpoint":"/boot/efi"},
+                {"name":"nvme3n1p3", "maj:min":"259:25", "rm":false, "size":"488M", "ro":false, "type":"part", "mountpoint":null,
+                "children": [
+                    {"name":"md0", "maj:min":"9:0", "rm":false, "size":"487M", "ro":false, "type":"raid1", "mountpoint":"/boot"}
+                ]
+                },
+                {"name":"nvme3n1p4", "maj:min":"259:26", "rm":false, "size":"7.6G", "ro":false, "type":"part", "mountpoint":null,
+                "children": [
+                    {"name":"md1", "maj:min":"9:1", "rm":false, "size":"7.6G", "ro":false, "type":"raid1", "mountpoint":"[SWAP]"}
+                ]
+                },
+                {"name":"nvme3n1p5", "maj:min":"259:27", "rm":false, "size":"19.1G", "ro":false, "type":"part", "mountpoint":null,
+                "children": [
+                    {"name":"md2", "maj:min":"9:2", "rm":false, "size":"19.1G", "ro":false, "type":"raid1", "mountpoint":"/"}
+                ]
+                },
+                {"name":"nvme3n1p6", "maj:min":"259:28", "rm":false, "size":"866.8G", "ro":false, "type":"part", "mountpoint":null}
+            ]
+        },
+        {"name":"nvme0n1", "maj:min":"259:22", "rm":false, "size":"3.5T", "ro":false, "type":"disk", "mountpoint":null,
+            "children": [
+                {"name":"nvme0n1p1", "maj:min":"259:29", "rm":false, "size":"3.5T", "ro":false, "type":"part", "mountpoint":null},
+                {"name":"nvme0n1p9", "maj:min":"259:30", "rm":false, "size":"8M", "ro":false, "type":"part", "mountpoint":null}
+            ]
+        },
+        {"name":"nvme2n1", "maj:min":"259:31", "rm":false, "size":"894.3G", "ro":false, "type":"disk", "mountpoint":null,
+            "children": [
+                {"name":"nvme2n1p1", "maj:min":"259:32", "rm":false, "size":"1M", "ro":false, "type":"part", "mountpoint":null},
+                {"name":"nvme2n1p2", "maj:min":"259:33", "rm":false, "size":"244M", "ro":false, "type":"part", "mountpoint":null},
+                {"name":"nvme2n1p3", "maj:min":"259:34", "rm":false, "size":"488M", "ro":false, "type":"part", "mountpoint":null,
+                "children": [
+                    {"name":"md0", "maj:min":"9:0", "rm":false, "size":"487M", "ro":false, "type":"raid1", "mountpoint":"/boot"}
+                ]
+                },
+                {"name":"nvme2n1p4", "maj:min":"259:35", "rm":false, "size":"7.6G", "ro":false, "type":"part", "mountpoint":null,
+                "children": [
+                    {"name":"md1", "maj:min":"9:1", "rm":false, "size":"7.6G", "ro":false, "type":"raid1", "mountpoint":"[SWAP]"}
+                ]
+                },
+                {"name":"nvme2n1p5", "maj:min":"259:36", "rm":false, "size":"19.1G", "ro":false, "type":"part", "mountpoint":null,
+                "children": [
+                    {"name":"md2", "maj:min":"9:2", "rm":false, "size":"19.1G", "ro":false, "type":"raid1", "mountpoint":"/"}
+                ]
+                },
+                {"name":"nvme2n1p6", "maj:min":"259:37", "rm":false, "size":"866.8G", "ro":false, "type":"part", "mountpoint":null}
+            ]
+        }
+    ]
+}

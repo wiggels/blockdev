@@ -1,0 +1,8 @@
+---
+source: tests/snapshots.rs
+expression: summary(&parsed)
+---
+[
+  "vda [disk] 252:0 size=8589934592 rm=false ro=false mounts=[] system=true",
+  "vda1 [part] 252:1 size=8589934592 rm=false ro=false mounts=[\"/\"] system=true"
+]
