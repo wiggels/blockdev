@@ -82,6 +82,15 @@ jobs:
           )
           git worktree remove --force "$tmpdir"
 
+      # rust-cache restores target/ from the previous run but prunes files it
+      # does not consider build outputs -- criterion's base/sample.json among
+      # them. criterion then sees a baseline dir w/ no data and prints
+      # "Criterion.rs ERROR: Failed to access file" to stdout, mid line, which
+      # breaks the `test ... bench:` format the action parses. every run is a
+      # fresh measurement anyway -- the history lives on gh-pages, not here
+      - name: Drop stale criterion state
+        run: rm -rf target/criterion
+
       - name: Run benchmarks
         # bencher format emits `test ... bench:` lines the action reads directly.
         # the walk group over fake sysroots is the deterministic number, the
