@@ -1,0 +1,41 @@
+# cargo-deny config. https://embarkstudios.github.io/cargo-deny/
+# four sections mirror `cargo deny check {advisories,licenses,bans,sources}`
+
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+# fail on any advisory. add explicit ignore entries with a justification if
+# a vulnerable dep is unavoidable
+yanked = "deny"
+ignore = []
+
+[licenses]
+version = 2
+# kept tight -- only what the current tree actually pulls in. cargo-deny
+# warns about unused allowances so adding speculatively is just noise. when
+# a new one shows up the audit job fails with "license is not explicitly
+# allowed", evaluate it vs MIT and add it here with a note
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "Unicode-3.0",   # unicode-ident
+]
+confidence-threshold = 0.8
+
+[bans]
+# dup versions are routine across transitive deps -- pinning to force
+# convergence is brittle and not worth it. the real concerns -- yanked,
+# advisories, license drift -- are still caught
+multiple-versions = "allow"
+wildcards = "deny"
+allow-wildcard-paths = false
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

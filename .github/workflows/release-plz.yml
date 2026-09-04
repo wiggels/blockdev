@@ -1,0 +1,126 @@
+name: Release
+
+# release-plz automates the release flow:
+#
+# * on every push to main it reads the conventional commit history and opens
+#   a "Release v0.x.y" pr bumping Cargo.toml, CHANGELOG.md, and the lockfile
+#
+# * merging that pr tags, publishes to crates.io, and creates a github
+#   release with the generated notes
+#
+# ## why preflight exists
+#
+# workflows are independent -- ci.yml, audit.yml, and this all start in
+# parallel on a main push. without the gate, release could publish even if
+# audit is failing on the same commit. preflight reruns the critical checks
+# here and the publish job needs it. belt and suspenders alongside branch
+# protection, which should also require ci / audit / semver on main
+#
+# ## one time setup
+#
+# 1. crates.io api token as repo secret CARGO_REGISTRY_TOKEN
+# 2. settings -> actions -> general -> workflow permissions -> read and write
+# 3. fine grained pat with contents:write + pull_requests:write as
+#    RELEASE_PLZ_TOKEN -- GITHUB_TOKEN works for opening the pr but cannot
+#    trigger other workflows on it, so ci would not run on the release pr
+# 4. branch protection on main requiring ci, audit, semver
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-plz-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # preflight -- everything that should block a publish if red
+  # ---------------------------------------------------------------------------
+  preflight:
+    name: preflight (gate publish on tests + audit)
+    if: ${{ github.repository_owner == 'wiggels' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt --check
+        run: cargo fmt --all --check
+
+      - name: cargo clippy
+        run: cargo clippy --all-targets --locked -- -D warnings -W clippy::pedantic
+
+      - name: cargo test
+        run: cargo test --all-targets --locked
+
+      - name: cargo deny check
+        # same set audit.yml runs -- duplicated on purpose so a parallel
+        # audit failure cannot be missed
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+
+      - name: cargo publish --dry-run
+        run: cargo publish --dry-run --locked
+
+  # ---------------------------------------------------------------------------
+  # publish when the release pr is merged -- gated on preflight
+  # ---------------------------------------------------------------------------
+  release-plz-release:
+    name: release-plz release
+    if: ${{ github.repository_owner == 'wiggels' }}
+    needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run release-plz
+        uses: release-plz/action@v0.5
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # open / update the next release pr. idempotent. not gated on preflight --
+  # opening a pr is harmless when the tree is red and the pr gets its own ci
+  # ---------------------------------------------------------------------------
+  release-plz-pr:
+    name: release-plz PR
+    if: ${{ github.repository_owner == 'wiggels' }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-plz-pr-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run release-plz
+        uses: release-plz/action@v0.5
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

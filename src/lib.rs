@@ -660,7 +660,10 @@ mod tests {
                 .is_none(),
         );
 
-        let children = nvme3n1.children.as_ref().expect("nvme3n1 should have children");
+        let children = nvme3n1
+            .children
+            .as_ref()
+            .expect("nvme3n1 should have children");
         assert_eq!(children.len(), 6);
 
         let nvme3n1p2 = children.iter().find(|c| c.name == "nvme3n1p2").unwrap();
@@ -717,7 +720,10 @@ mod tests {
         assert_eq!(parse_size_string("1KB"), Some(1024));
         assert_eq!(parse_size_string("1M"), Some(1024 * 1024));
         assert_eq!(parse_size_string("1G"), Some(1 << 30));
-        assert_eq!(parse_size_string("3.5T"), Some((3.5_f64 * (1u64 << 40) as f64) as u64));
+        assert_eq!(
+            parse_size_string("3.5T"),
+            Some((3.5_f64 * (1u64 << 40) as f64) as u64)
+        );
         // case-insensitive
         assert_eq!(parse_size_string("1g"), Some(1 << 30));
         assert_eq!(parse_size_string("1gib"), Some(1 << 30));
@@ -1109,7 +1115,10 @@ mod tests {
         let devices = parse_lsblk(json).expect("Failed to parse JSON");
         let device = devices.find_by_name("sda").unwrap();
         assert!(device.is_mounted());
-        assert_eq!(device.active_mountpoints(), vec!["/mnt/data", "/mnt/backup"]);
+        assert_eq!(
+            device.active_mountpoints(),
+            vec!["/mnt/data", "/mnt/backup"]
+        );
     }
 
     #[test]
@@ -1136,7 +1145,10 @@ mod tests {
             }]
         }"#;
         let devices = parse_lsblk(json).expect("Failed to parse JSON");
-        assert_eq!(devices.find_by_name("weird").unwrap().device_type, DeviceType::Other);
+        assert_eq!(
+            devices.find_by_name("weird").unwrap().device_type,
+            DeviceType::Other
+        );
     }
 
     #[test]

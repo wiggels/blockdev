@@ -1,7 +1,24 @@
+//! criterion benches for `blockdev` -- regression detection, not micro-opt
+//!
+//! each bench is one user visible op with a stable name so ci can diff it
+//! against the baseline stored on gh-pages. parse benches report throughput
+//! in bytes so a regression reads in absolute terms
+//!
+//! ```sh
+//! cargo bench --bench parse -- --save-baseline main
+//! # ... make changes ...
+//! cargo bench --bench parse -- --baseline main
+//! ```
+//!
+//! criterion writes reports to target/criterion -- gitignored so they stay
+//! local. anything over 5% slower gets flagged in the report
+
 use std::fmt::Write as _;
 
 use blockdev::{BlockDevices, parse_lsblk};
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use std::hint::black_box;
+
+use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 
 const SMALL_FIXTURE: &str = include_str!("fixtures/small.json");
 
@@ -31,7 +48,9 @@ fn make_large_fixture(n_disks: usize) -> String {
 }
 
 fn make_size_string_fixture(n: usize) -> String {
-    let suffixes = ["500G", "3.5T", "8M", "1.7T", "894.3G", "447.1G", "19.1G", "488M"];
+    let suffixes = [
+        "500G", "3.5T", "8M", "1.7T", "894.3G", "447.1G", "19.1G", "488M",
+    ];
     let mut s = String::from("{\"blockdevices\":[");
     for i in 0..n {
         if i > 0 {
@@ -69,21 +88,25 @@ fn make_byte_size_fixture(n: usize) -> String {
 fn bench_parse(c: &mut Criterion) {
     let mut group = c.benchmark_group("parse_lsblk");
 
+    group.throughput(Throughput::Bytes(SMALL_FIXTURE.len() as u64));
     group.bench_function("small_realistic", |b| {
         b.iter(|| parse_lsblk(black_box(SMALL_FIXTURE)).unwrap());
     });
 
     let large = make_large_fixture(256);
+    group.throughput(Throughput::Bytes(large.len() as u64));
     group.bench_function("large_256_disks_human_size", |b| {
         b.iter(|| parse_lsblk(black_box(&large)).unwrap());
     });
 
     let bytes = make_byte_size_fixture(256);
+    group.throughput(Throughput::Bytes(bytes.len() as u64));
     group.bench_function("large_256_disks_byte_size", |b| {
         b.iter(|| parse_lsblk(black_box(&bytes)).unwrap());
     });
 
     let sizes = make_size_string_fixture(1024);
+    group.throughput(Throughput::Bytes(sizes.len() as u64));
     group.bench_function("size_string_heavy_1024", |b| {
         b.iter(|| parse_lsblk(black_box(&sizes)).unwrap());
     });
