@@ -322,9 +322,7 @@ fn read_bool(p: &Path) -> bool {
 }
 
 fn dir_has_entries(p: &Path) -> bool {
-    fs::read_dir(p)
-        .map(|mut d| d.next().is_some())
-        .unwrap_or(false)
+    fs::read_dir(p).is_ok_and(|mut d| d.next().is_some())
 }
 
 // ---------------------------------------------------------------------------
