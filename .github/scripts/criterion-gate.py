@@ -19,9 +19,13 @@ rows = []
 worst = []
 for raw in sys.stdin:
     line = raw.replace("−", "-").rstrip()
+    # short ids share a line with time:, long ones get their own line first
     m = re.match(r"^(\S+)\s+time:", line)
     if m:
         bench = m.group(1)
+        continue
+    if re.match(r"^[\w./-]+/[\w./-]+$", line):
+        bench = line
         continue
     m = re.search(r"change:\s*\[\s*([-+]?[\d.]+)%\s+([-+]?[\d.]+)%\s+([-+]?[\d.]+)%", line)
     if m and bench:
