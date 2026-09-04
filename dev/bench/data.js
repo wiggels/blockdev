@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788555375917,
+  "lastUpdate": 1788555688690,
   "repoUrl": "https://github.com/wiggels/blockdev",
   "entries": {
     "Benchmark": [
@@ -191,6 +191,102 @@ window.BENCHMARK_DATA = {
             "name": "filters/system_filter_256",
             "value": 1307,
             "range": "± 22",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "wiggels@gmail.com",
+            "name": "Hunter Wigelsworth",
+            "username": "wiggels"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6e75108f6388fcc38adaf37a93ac63ccb3188c80",
+          "message": "Merge pull request #10 from wiggels/release-plz-2026-09-04T20-53-47Z\n\nchore: release v0.4.2",
+          "timestamp": "2026-09-04T15:58:58-05:00",
+          "tree_id": "d945e4d09f39b6566a983f65b39ddb2493be2b62",
+          "url": "https://github.com/wiggels/blockdev/commit/6e75108f6388fcc38adaf37a93ac63ccb3188c80"
+        },
+        "date": 1788555687826,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "get_devices/spawn_only",
+            "value": 1335665,
+            "range": "± 16253",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "get_devices/parse_live_output",
+            "value": 1403,
+            "range": "± 47",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "get_devices/full_request",
+            "value": 1340815,
+            "range": "± 49817",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse_lsblk/small_realistic",
+            "value": 9208,
+            "range": "± 59",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse_lsblk/large_256_disks_human_size",
+            "value": 109695,
+            "range": "± 2258",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse_lsblk/large_256_disks_byte_size",
+            "value": 43284,
+            "range": "± 1538",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse_lsblk/size_string_heavy_1024",
+            "value": 190087,
+            "range": "± 1453",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "filters/system_filter_small",
+            "value": 99,
+            "range": "± 3",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "filters/non_system_filter_small",
+            "value": 110,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "filters/find_by_name_hit",
+            "value": 10,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "filters/find_by_name_miss",
+            "value": 2,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "filters/system_filter_256",
+            "value": 663,
+            "range": "± 19",
             "unit": "ns/iter"
           }
         ]
