@@ -22,6 +22,13 @@
 //! # Ok::<(), blockdev::BlockDevError>(())
 //! ```
 //!
+//! ## Skipping the `lsblk` process
+//!
+//! [`get_devices_sysfs`] builds the same tree by reading `/sys` and `/proc`
+//! directly. No process is spawned and nothing is deserialized, so it is
+//! several times faster than [`get_devices`]. It mirrors `lsblk`'s default
+//! filtering rules; the two are asserted equal in CI on a live system.
+//!
 //! ## Parsing pre-captured JSON
 //!
 //! [`parse_lsblk`] accepts any string produced by `lsblk --json` (with or without
@@ -41,6 +48,9 @@ use std::str::FromStr;
 use std::string::FromUtf8Error;
 use std::vec::IntoIter;
 use thiserror::Error;
+
+mod sysfs;
+pub use sysfs::get_devices_sysfs;
 
 /// Represents the major and minor device numbers (`maj:min` in `lsblk` output).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -196,6 +206,35 @@ impl DeviceType {
 impl std::fmt::Display for DeviceType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_str())
+    }
+}
+
+/// Error type for [`DeviceType::from_str`]. Never actually produced -- unknown
+/// strings map to [`DeviceType::Other`] -- but `FromStr` needs an error type.
+#[derive(Debug, Error)]
+#[error("unreachable: every string maps to a DeviceType")]
+pub struct ParseDeviceTypeError;
+
+impl FromStr for DeviceType {
+    type Err = ParseDeviceTypeError;
+
+    /// Infallible in practice. Same mapping as the serde path: exact lowercase
+    /// `lsblk` names, anything else is [`DeviceType::Other`].
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "disk" => DeviceType::Disk,
+            "part" => DeviceType::Part,
+            "loop" => DeviceType::Loop,
+            "raid0" => DeviceType::Raid0,
+            "raid1" => DeviceType::Raid1,
+            "raid5" => DeviceType::Raid5,
+            "raid6" => DeviceType::Raid6,
+            "raid10" => DeviceType::Raid10,
+            "lvm" => DeviceType::Lvm,
+            "crypt" => DeviceType::Crypt,
+            "rom" => DeviceType::Rom,
+            _ => DeviceType::Other,
+        })
     }
 }
 
@@ -1277,5 +1316,28 @@ mod tests {
         let devices = parse_lsblk(json).expect("Failed to parse JSON");
         assert_eq!(devices.find_by_name("a").unwrap().size, 1 << 30);
         assert_eq!(devices.find_by_name("b").unwrap().size, 1 << 30);
+    }
+}
+
+#[cfg(test)]
+mod sysfs_live_tests {
+    //! needs a real /sys and lsblk -- ci runs these on the linux job
+
+    use super::*;
+
+    /// the sysfs walk must produce exactly what lsblk --json --bytes says on
+    /// the same machine. any drift here is a bug in sysfs.rs, not noise
+    #[test]
+    #[ignore = "requires /sys and the lsblk command"]
+    fn sysfs_backend_matches_lsblk() {
+        let via_lsblk = get_devices().expect("lsblk");
+        let via_sysfs = get_devices_sysfs().expect("sysfs");
+        assert_eq!(
+            via_sysfs,
+            via_lsblk,
+            "sysfs backend disagrees with lsblk\nsysfs: {}\nlsblk: {}",
+            serde_json::to_string_pretty(&via_sysfs).unwrap(),
+            serde_json::to_string_pretty(&via_lsblk).unwrap()
+        );
     }
 }

@@ -60,6 +60,14 @@ fn bench_e2e(c: &mut Criterion) {
         b.iter(|| blockdev::get_devices().unwrap());
     });
 
+    // the spawn free path -- same tree, straight from /sys. this is the
+    // number the whole sysfs investigation is about
+    if blockdev::get_devices_sysfs().is_ok() {
+        group.bench_function("sysfs_full_request", |b| {
+            b.iter(|| blockdev::get_devices_sysfs().unwrap());
+        });
+    }
+
     group.finish();
 }
 

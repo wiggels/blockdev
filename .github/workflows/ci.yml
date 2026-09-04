@@ -47,10 +47,11 @@ jobs:
       - name: cargo test --release (perf budgets, linux only)
         if: matrix.os == 'ubuntu-latest' && matrix.rust == 'stable'
         run: cargo test --release --test perf_budgets -- --nocapture
-      # the real lsblk smoke test -- only place we actually have lsblk
-      - name: cargo test -- --ignored (lsblk smoke, linux only)
+      # the real lsblk smoke test plus sysfs-vs-lsblk equivalence -- only
+      # place we actually have lsblk and a /sys
+      - name: cargo test -- --ignored (lsblk + sysfs live tests, linux only)
         if: matrix.os == 'ubuntu-latest' && matrix.rust == 'stable'
-        run: cargo test --lib --locked -- --ignored test_get_devices
+        run: cargo test --lib --locked -- --ignored
 
   # ---------------------------------------------------------------------------
   # msrv -- keep building on the version we advertise in Cargo.toml
