@@ -4,11 +4,41 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [0.5.0](https://github.com/wiggels/blockdev/compare/v0.4.2...v0.5.0) - 2026-09-04
+
+### Added
+
+- [**breaking**] Walk `/sys` and `/proc` directly. `get_devices()` no longer spawns `lsblk` or parses JSON; it reads the same sysfs files `lsblk` does, matches its output, and is several times faster. Zero runtime dependencies.
+- `get_devices_at(sysroot)`, the equivalent of `lsblk --sysroot`, for bind-mounted host trees and tests.
+- Optional `serde` feature providing `Serialize`/`Deserialize` on every type; `MajMin` as the `major:minor` string.
+- `DeviceType` implements an infallible `FromStr` and is `Copy`.
+
+### Changed
+
+- [**breaking**] `BlockDevices.blockdevices` renamed to `devices`.
+- [**breaking**] `BlockDevice.children` is `Vec<BlockDevice>` instead of `Option<Vec<BlockDevice>>`.
+- [**breaking**] `BlockDevice.mountpoints` is `Vec<String>` instead of `Vec<Option<String>>`; empty when unmounted.
+- [**breaking**] `BlockDevError` is `#[non_exhaustive]` with a single `Io { path, source }` variant.
+
+### Removed
+
+- [**breaking**] `parse_lsblk`, `BlockDevice::children_iter`, `BlockDevice::active_mountpoints`, `BlockDevice::active_mountpoints_iter`, and the `serde_json` and `thiserror` dependencies.
+
+### Documentation
+
+- `docs/sysfs-backend.md`: why there is no lsblk C API to call, what the walk reads, and what it does not cover.
 
 ### Fixed
 
 - Satisfy clippy 1.98 map_unwrap_or on the slaves check
+
+## [0.4.2](https://github.com/wiggels/blockdev/compare/v0.4.1...v0.4.2) - 2026-09-04
+
+### Performance
+
+- Drop `serde_json::Value` round trips in the `size` and `mountpoints` deserializers in favor of direct visitors, and parse `maj:min` and human-readable sizes with exact integer math.
+
 ## [0.4.1](https://github.com/wiggels/blockdev/compare/v0.4.0...v0.4.1) - 2026-09-04
 
 ### Documentation
@@ -27,10 +57,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Build
 
 - Switch release flow to release-plz
-# Blockdev Changelog
-
-All notable changes to this project will be documented in this file.
-
 
 ## [0.4.0](https://github.com/wiggels/blockdev/compare/v0.3.1...0.4.0) - 2026-05-14
 
