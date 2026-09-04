@@ -1,25 +1,25 @@
 name: Benchmarks
 
-# runs cargo bench on every pr and every push to main, feeds the criterion
-# output through github-action-benchmark, and:
+# two different jobs of work depending on the event:
 #
-# * on main pushes: appends the result to the history on the gh-pages branch
-#   under /dev/bench/ -- the pages site for this repo plots it over time
+# * pull requests: regression gate. github hosted runners vary 2-3x between
+#   machines, so comparing a pr against the last main run is noise. instead
+#   bench the merge base and the head back to back on the same runner and
+#   fail if a deterministic bench -- the walk and filters groups over fake
+#   sysroots -- is more than 25% slower. criterion's --baseline does the
+#   comparison, .github/scripts/criterion-gate.py reads the verdict
 #
-# * on prs: comments with the relative change vs the last main result and
-#   fails the check if anything regressed past the threshold so it cannot
-#   merge silently
+# * pushes to main: history. run everything including the live group and
+#   append to /dev/bench/ on gh-pages via github-action-benchmark. no
+#   alerting there -- cross run numbers are for the trend line, not a gate
 #
 # ## one time setup
 #
-# 1. the first push run self-bootstraps gh-pages -- the action itself does
-#    not create the branch and dies with "could not find remote ref gh-pages"
-#    without it
-# 2. settings -> pages -> source gh-pages. before or after first run, either
-#    works
+# 1. gh-pages exists as an orphan branch -- the bootstrap step below makes
+#    one if not
+# 2. settings -> pages -> source gh-pages
 # 3. settings -> actions -> general -> workflow permissions -> read and write
 #    so GITHUB_TOKEN can push gh-pages
-# 4. pr runs only alert, they never push -- so fork prs fail safe
 
 on:
   push:
@@ -32,7 +32,6 @@ permissions:
   pull-requests: write
   deployments: write
 
-# only the latest run per ref matters
 concurrency:
   group: bench-${{ github.ref }}
   cancel-in-progress: true
@@ -43,11 +42,44 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          # merge base needs history
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
-      # orphan gh-pages on first run so the action has somewhere to push.
-      # no-op after that. skipped on prs since they do not push
+      # rust-cache restores target/ but prunes criterion's sample files, so
+      # a restored baseline dir with no data makes criterion print errors
+      # into stdout mid line. start clean every run
+      - name: Drop stale criterion state
+        run: rm -rf target/criterion
+
+      # ---------------------------------------------------------------
+      # pull request: same runner a/b against the merge base
+      # ---------------------------------------------------------------
+      - name: Bench merge base on this runner
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          base="$(git merge-base HEAD "origin/${{ github.base_ref }}")"
+          echo "merge base: $base"
+          git worktree add --detach /tmp/base "$base"
+          # shared target dir so the saved baseline is where the head run looks
+          cd /tmp/base
+          CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target" \
+            cargo bench --bench devices -- walk filters --save-baseline base
+
+      - name: Bench head and gate against base
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          cargo bench --bench devices -- walk filters --baseline base 2>&1 \
+            | tee ab.txt \
+            | python3 .github/scripts/criterion-gate.py 25
+
+      # ---------------------------------------------------------------
+      # push to main: record history
+      # ---------------------------------------------------------------
       - name: Bootstrap gh-pages branch (first run only)
         if: github.event_name == 'push'
         env:
@@ -61,57 +93,33 @@ jobs:
           echo "gh-pages not found -- creating empty orphan branch."
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # orphan branch in a separate worktree so the bench step still has
-          # the source tree
           tmpdir="$(mktemp -d)"
           git worktree add --detach "$tmpdir"
           (
             cd "$tmpdir"
             git checkout --orphan gh-pages
             git rm -rf . >/dev/null 2>&1 || true
-            cat > index.html <<'HTML'
-          <!doctype html>
-          <meta charset="utf-8">
-          <title>blockdev benchmarks</title>
-          <p>Benchmark history is published under
-          <a href="./dev/bench/">/dev/bench/</a>.</p>
-          HTML
-            git add index.html
-            git commit -m "ci: bootstrap gh-pages for benchmark history"
+            git commit --allow-empty -m "gh-pages: empty root for benchmark history"
             git push origin gh-pages
           )
           git worktree remove --force "$tmpdir"
 
-      # rust-cache restores target/ from the previous run but prunes files it
-      # does not consider build outputs -- criterion's base/sample.json among
-      # them. criterion then sees a baseline dir w/ no data and prints
-      # "Criterion.rs ERROR: Failed to access file" to stdout, mid line, which
-      # breaks the `test ... bench:` format the action parses. every run is a
-      # fresh measurement anyway -- the history lives on gh-pages, not here
-      - name: Drop stale criterion state
-        run: rm -rf target/criterion
-
-      - name: Run benchmarks
-        # bencher format emits `test ... bench:` lines the action reads directly.
-        # the walk group over fake sysroots is the deterministic number, the
-        # live group is this runner's real /sys plus lsblk for reference
+      - name: Run benchmarks for history
+        if: github.event_name == 'push'
+        # bencher format emits the `test ... bench:` lines the action reads
         run: cargo bench --bench devices -- --output-format bencher | tee output.txt
 
-      - name: Store result and alert on regression
+      - name: Store result on gh-pages
+        if: github.event_name == 'push'
         uses: benchmark-action/github-action-benchmark@v1
         with:
           tool: cargo
           output-file-path: output.txt
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          # prs alert only, main pushes history
-          auto-push: ${{ github.event_name == 'push' }}
-          # 125 = fail if anything is >25% slower than baseline. shared
-          # runners drift +-20% between runs so anything tighter flakes.
-          # lower it on dedicated runners
-          alert-threshold: '125%'
-          comment-on-alert: true
-          fail-on-alert: true
-          # annotate the commit so the regression shows in checks even when
-          # the bot cannot comment -- fork prs
-          alert-comment-cc-users: '@${{ github.actor }}'
+          auto-push: true
+          # history only -- the same runner a/b above is the gate. cross run
+          # comparisons swing 2-3x with runner hardware and would only alert
+          # on noise
+          fail-on-alert: false
+          comment-on-alert: false
           summary-always: true
