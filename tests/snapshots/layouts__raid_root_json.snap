@@ -1,0 +1,158 @@
+---
+source: tests/layouts.rs
+expression: json
+---
+{
+  "devices": [
+    {
+      "name": "sda",
+      "maj_min": "8:0",
+      "rm": false,
+      "size": 480103981056,
+      "ro": false,
+      "device_type": "disk",
+      "mountpoints": [],
+      "children": [
+        {
+          "name": "sda1",
+          "maj_min": "8:1",
+          "rm": false,
+          "size": 536870912,
+          "ro": false,
+          "device_type": "part",
+          "mountpoints": [],
+          "children": [
+            {
+              "name": "md0",
+              "maj_min": "9:0",
+              "rm": false,
+              "size": 535822336,
+              "ro": false,
+              "device_type": "raid1",
+              "mountpoints": [
+                "/boot"
+              ],
+              "children": []
+            }
+          ]
+        },
+        {
+          "name": "sda2",
+          "maj_min": "8:2",
+          "rm": false,
+          "size": 8589934592,
+          "ro": false,
+          "device_type": "part",
+          "mountpoints": [
+            "[SWAP]"
+          ],
+          "children": []
+        },
+        {
+          "name": "sda3",
+          "maj_min": "8:3",
+          "rm": false,
+          "size": 470977175552,
+          "ro": false,
+          "device_type": "part",
+          "mountpoints": [],
+          "children": [
+            {
+              "name": "md1",
+              "maj_min": "9:1",
+              "rm": false,
+              "size": 470909550592,
+              "ro": false,
+              "device_type": "raid1",
+              "mountpoints": [
+                "/"
+              ],
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sdb",
+      "maj_min": "8:16",
+      "rm": false,
+      "size": 480103981056,
+      "ro": false,
+      "device_type": "disk",
+      "mountpoints": [],
+      "children": [
+        {
+          "name": "sdb1",
+          "maj_min": "8:17",
+          "rm": false,
+          "size": 536870912,
+          "ro": false,
+          "device_type": "part",
+          "mountpoints": [],
+          "children": [
+            {
+              "name": "md0",
+              "maj_min": "9:0",
+              "rm": false,
+              "size": 535822336,
+              "ro": false,
+              "device_type": "raid1",
+              "mountpoints": [
+                "/boot"
+              ],
+              "children": []
+            }
+          ]
+        },
+        {
+          "name": "sdb2",
+          "maj_min": "8:18",
+          "rm": false,
+          "size": 8589934592,
+          "ro": false,
+          "device_type": "part",
+          "mountpoints": [
+            "[SWAP]"
+          ],
+          "children": []
+        },
+        {
+          "name": "sdb3",
+          "maj_min": "8:19",
+          "rm": false,
+          "size": 470977175552,
+          "ro": false,
+          "device_type": "part",
+          "mountpoints": [],
+          "children": [
+            {
+              "name": "md1",
+              "maj_min": "9:1",
+              "rm": false,
+              "size": 470909550592,
+              "ro": false,
+              "device_type": "raid1",
+              "mountpoints": [
+                "/"
+              ],
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "nvme0n1",
+      "maj_min": "259:0",
+      "rm": false,
+      "size": 1920383410176,
+      "ro": false,
+      "device_type": "disk",
+      "mountpoints": [
+        "/data"
+      ],
+      "children": []
+    }
+  ]
+}

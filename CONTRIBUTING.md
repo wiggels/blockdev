@@ -16,19 +16,23 @@ edition 2024 itself needs). CI verifies the crate still builds on 1.85, so
 don't reach for newer features without bumping `rust-version` in
 `Cargo.toml` -- that is a breaking change for downstream consumers.
 
-`get_devices()` shells out to `lsblk`, which only exists on Linux. Everything
-else (`parse_lsblk`, the types, the filters) is pure and runs anywhere. The
-one test that actually invokes `lsblk` is `#[ignore]`d and CI runs it
-explicitly on the Linux job.
+Everything is Linux sysfs, so `get_devices()` only works on Linux. The
+walker itself is plain file reads, which is why the test suite builds fake
+sysroots in a temp dir and runs anywhere, including macOS CI. The two tests
+that need a real `/sys` (and one of them `lsblk`) are `#[ignore]`d and CI
+runs them explicitly on the Linux job.
 
 ## Project layout
 
 ```txt
-src/lib.rs        Types, deserializers, filters, get_devices (lsblk backend).
-src/sysfs.rs      get_devices_sysfs -- same tree straight from /sys and /proc.
+src/lib.rs        Types, filters, get_devices / get_devices_at.
+src/sysfs.rs      The walk -- sysfs and mountinfo reading, mirrors lsblk's rules.
+tests/common/     FakeRoot -- builds fake sysroots for tests and benches.
+tests/layouts.rs  Snapshot tests over real-shaped machine layouts (insta).
+tests/lsblk_equivalence.rs  Ignored live diff against lsblk --json --bytes.
+tests/perf_budgets.rs       Wall-clock budgets, run under plain cargo test.
+benches/devices.rs          Criterion regression benchmarks.
 docs/             Design notes and investigations.
-tests/            Snapshot tests (insta) over real-shaped lsblk fixtures, perf budgets.
-benches/          Criterion regression benchmarks + the small.json fixture.
 .github/          CI, bench, release, audit, semver, coverage, dependabot configs.
 ```
 
@@ -40,6 +44,7 @@ Before opening a PR, run locally:
 cargo fmt --all
 cargo clippy --all-targets -- -D warnings -W clippy::pedantic
 cargo test --all-targets --locked
+cargo test --all-targets --locked --features serde
 cargo test --release --test perf_budgets -- --nocapture
 cargo doc --no-deps --all-features
 ```
@@ -61,10 +66,10 @@ parses commit messages to generate changelog entries and version bumps, so:
 ### Snapshot tests
 
 We use [`insta`](https://insta.rs/) for snapshot tests over a handful of
-real-shaped `lsblk` fixtures (RAID root, legacy single `mountpoint`,
-LUKS+LVM, EC2). When you change something that affects parsed output, expect
-a snapshot to fail. Review the diff, decide whether the change is
-intentional, and accept it:
+real-shaped machine layouts (RAID root, LUKS+LVM, EC2, workstation) built
+as fake sysroots in `tests/layouts.rs`. When you change something that
+affects the walk's output, expect a snapshot to fail. Review the diff,
+decide whether the change is intentional, and accept it:
 
 ```sh
 cargo install cargo-insta   # one time
@@ -73,15 +78,30 @@ cargo insta review
 
 The accepted `.snap` files get committed alongside the code change.
 
+### Matching lsblk
+
+The walker is meant to give the same answer as `lsblk --json --bytes`. If
+you touch `src/sysfs.rs`, read the matching code in util-linux
+(`lsblk-cmd/lsblk.c`, `lsblk-cmd/mnt.c`, `lib/sysfs.c`) and run the live
+diff on a Linux box:
+
+```sh
+cargo test --test lsblk_equivalence -- --ignored
+```
+
+A layout that lsblk handles and we do not is a bug; add it as a fake
+sysroot in `tests/layouts.rs` along with the fix.
+
 ### Benchmarks
 
 The repo has three layers of perf regression defense:
 
 1. **`tests/perf_budgets.rs`** -- wall-clock budgets enforced by `cargo test`.
    Catastrophic regressions fail there.
-2. **`benches/parse.rs`** -- criterion micro-benchmarks. Run locally with
-   `cargo bench --bench parse -- --save-baseline main` before changes,
-   then `cargo bench --bench parse -- --baseline main` after to compare.
+2. **`benches/devices.rs`** -- criterion benchmarks over fake sysroots plus
+   a live walk. Run locally with
+   `cargo bench --bench devices -- --save-baseline main` before changes,
+   then `cargo bench --bench devices -- --baseline main` after to compare.
 3. **CI bench workflow** -- runs against `main` on every PR and fails the
    build if anything regresses by more than 25%. History is published to
    GitHub Pages.

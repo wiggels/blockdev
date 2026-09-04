@@ -1,33 +1,34 @@
 [package]
 name = "blockdev"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Hunter Wigelsworth <wiggels@gmail.com>"]
 edition = "2024"
 rust-version = "1.85"
-description = "A Rust library for parsing and working with lsblk JSON output, providing type-safe block device representation and utilities for Linux"
+description = "Enumerate Linux block devices straight from /sys and /proc, no lsblk process, no parsing"
 license = "MIT"
 repository = "https://github.com/wiggels/blockdev"
 homepage = "https://github.com/wiggels/blockdev"
 documentation = "https://docs.rs/blockdev"
 readme = "README.md"
-keywords = ["block", "lsblk", "linux", "device"]
-categories = ["parsing"]
+keywords = ["block", "lsblk", "linux", "device", "sysfs"]
+categories = ["os::linux-apis", "filesystem"]
 
 [dependencies]
-serde = { version = "1.0.218", features = ["derive"] }
-serde_json = "1.0.139"
-thiserror = "2.0"
+# optional -- Serialize/Deserialize derives on every type, off by default
+serde = { version = "1.0.218", features = ["derive"], optional = true }
+
+[features]
+serde = ["dep:serde"]
 
 [dev-dependencies]
 criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
 insta = { version = "1.40", features = ["json"] }
+# only for the ignored live test that diffs the walk against real lsblk output
+serde = { version = "1.0.218", features = ["derive"] }
+serde_json = "1.0.139"
 
 [[bench]]
-name = "parse"
-harness = false
-
-[[bench]]
-name = "e2e"
+name = "devices"
 harness = false
 
 [profile.bench]

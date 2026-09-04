@@ -84,9 +84,9 @@ jobs:
 
       - name: Run benchmarks
         # bencher format emits `test ... bench:` lines the action reads directly.
-        # e2e needs a real lsblk which ubuntu runners have -- it is the number
-        # a caller actually pays, parse is the part we control
-        run: cargo bench --bench parse --bench e2e -- --output-format bencher | tee output.txt
+        # the walk group over fake sysroots is the deterministic number, the
+        # live group is this runner's real /sys plus lsblk for reference
+        run: cargo bench --bench devices -- --output-format bencher | tee output.txt
 
       - name: Store result and alert on regression
         uses: benchmark-action/github-action-benchmark@v1

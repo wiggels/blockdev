@@ -1,12 +1,8 @@
-//! sysfs backend -- build a [`BlockDevices`] tree straight from `/sys` and
-//! `/proc`, no lsblk process, no json
+//! the walk -- build a [`BlockDevices`] tree straight from `/sys` and `/proc`
 //!
-//! this is what lsblk itself does under the hood -- see `lsblk-cmd/lsblk.c`
-//! and `lsblk-cmd/mnt.c` in util-linux. there is no public c api to call:
-//! lsblk-cmd builds a gpl binary only, its header is internal. so the way to
-//! skip the fork+exec and the deser is to read the same files it reads
-//!
-//! semantics mirror lsblk defaults -- plain `lsblk --json --bytes`:
+//! this is what lsblk does under the hood -- see `lsblk-cmd/lsblk.c` and
+//! `lsblk-cmd/mnt.c` in util-linux. semantics mirror its defaults, i.e.
+//! plain `lsblk --json --bytes`:
 //!
 //! * roots are `/sys/block` entries that are not ram disks -- major 1 -- and
 //!   have no `slaves`, i.e. are not in the middle of a stack
@@ -24,10 +20,9 @@
 //! shows in mountinfo, and the `BLKROGET` ioctl fallback when `ro` is absent
 
 use std::fs;
-use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::{BlockDevice, BlockDevices, DeviceType, MajMin};
+use crate::{BlockDevError, BlockDevice, BlockDevices, DeviceType, MajMin};
 
 /// major numbers w/ special handling -- same constants lsblk uses
 const RAMDISK_MAJOR: u32 = 1;
@@ -37,43 +32,35 @@ const LOOP_MAJOR: u32 = 7;
 /// crypt > lvm. sysfs cannot cycle in practice but a bad fixture could
 const MAX_DEPTH: usize = 32;
 
-/// Builds the device tree by reading `/sys` and `/proc` directly, without
-/// spawning `lsblk`.
-///
-/// Produces the same [`BlockDevices`] shape as [`get_devices`](crate::get_devices)
-/// and follows `lsblk`'s default filtering rules. Linux only -- on any other
-/// platform this returns an error because `/sys/block` does not exist.
-///
-/// # Errors
-///
-/// Returns the underlying [`io::Error`] if `/sys/block` or
-/// `/proc/self/mountinfo` cannot be read. Missing optional attributes on an
-/// individual device are treated as defaults, not errors, so a device that
-/// is being torn down mid-walk does not fail the whole call.
-pub fn get_devices_sysfs() -> io::Result<BlockDevices> {
-    get_devices_from_sysroot(Path::new("/"))
-}
+/// entry point -- `root` holds `sys/` and `proc/`
+pub(crate) fn walk(root: &Path) -> Result<BlockDevices, BlockDevError> {
+    // sys/block first -- on a non linux box or a masked container that is
+    // the error worth seeing, not a missing mountinfo
+    let block = root.join("sys/block");
+    let entries = fs::read_dir(&block).map_err(|source| BlockDevError::Io {
+        path: block.clone(),
+        source,
+    })?;
 
-/// same as [`get_devices_sysfs`] but rooted somewhere else -- `lsblk --sysroot`.
-/// tests point this at a fake tree
-pub(crate) fn get_devices_from_sysroot(root: &Path) -> io::Result<BlockDevices> {
     let walker = Walker {
         class_block: root.join("sys/class/block"),
         mounts: MountTable::load(root)?,
     };
 
-    let mut roots = Vec::new();
-    for entry in fs::read_dir(root.join("sys/block"))? {
-        let name = entry?.file_name();
+    let mut devices = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|source| BlockDevError::Io {
+            path: block.clone(),
+            source,
+        })?;
+        let name = entry.file_name();
         let Some(name) = name.to_str() else { continue };
         if let Some(dev) = walker.root_device(name) {
-            roots.push(dev);
+            devices.push(dev);
         }
     }
-    roots.sort_by_key(|d| d.maj_min);
-    Ok(BlockDevices {
-        blockdevices: roots,
-    })
+    devices.sort_by_key(|d| d.maj_min);
+    Ok(BlockDevices { devices })
 }
 
 struct Walker {
@@ -139,8 +126,12 @@ impl Walker {
 
         let device_type = device_type(kname, dir, is_part);
         let name = dm_name.unwrap_or_else(|| kname.replace('!', "/"));
+        // dm devices can show up in mountinfo/swaps as /dev/dm-N or as
+        // /dev/mapper/<name> -- lsblk canonicalizes, we just try both
         let mapper_path = dm_name_path(kname, dir);
-        let mountpoints = self.mounts.lookup(maj_min, &name, mapper_path.as_deref());
+        let mountpoints = self
+            .mounts
+            .lookup(maj_min, &name, kname, mapper_path.as_deref());
 
         let mut children = Vec::new();
         if depth < MAX_DEPTH {
@@ -163,11 +154,7 @@ impl Walker {
             ro: read_bool(&dir.join("ro")),
             device_type,
             mountpoints,
-            children: if children.is_empty() {
-                None
-            } else {
-                Some(children)
-            },
+            children,
         }
     }
 
@@ -359,8 +346,10 @@ struct MountTable {
 }
 
 impl MountTable {
-    fn load(root: &Path) -> io::Result<Self> {
-        let mountinfo = fs::read_to_string(root.join("proc/self/mountinfo"))?;
+    fn load(root: &Path) -> Result<Self, BlockDevError> {
+        let path = root.join("proc/self/mountinfo");
+        let mountinfo =
+            fs::read_to_string(&path).map_err(|source| BlockDevError::Io { path, source })?;
         let mounts = mountinfo.lines().filter_map(parse_mountinfo_line).collect();
         // swaps is optional -- no swap configured, or no procfs swap support
         let swaps = fs::read_to_string(root.join("proc/swaps"))
@@ -376,24 +365,28 @@ impl MountTable {
 
     /// lsblk `lsblk_device_get_filesystems` then the MOUNTPOINTS column:
     /// every mountinfo entry matching by devno or source path, newest first.
-    /// nothing mounted -> `[null]` like lsblk's json
-    fn lookup(&self, devno: MajMin, name: &str, mapper_path: Option<&str>) -> Vec<Option<String>> {
+    /// nothing mounted -> empty
+    fn lookup(
+        &self,
+        devno: MajMin,
+        name: &str,
+        kname: &str,
+        mapper_path: Option<&str>,
+    ) -> Vec<String> {
         let dev_path = format!("/dev/{name}");
-        let matches_src = |s: &str| s == dev_path || mapper_path == Some(s);
+        let kdev_path = format!("/dev/{kname}");
+        let matches_src = |s: &str| s == dev_path || s == kdev_path || mapper_path == Some(s);
 
-        let mut out: Vec<Option<String>> = self
+        let mut out: Vec<String> = self
             .mounts
             .iter()
             .rev()
             .filter(|m| m.devno == devno || matches_src(&m.source))
-            .map(|m| Some(m.target.clone()))
+            .map(|m| m.target.clone())
             .collect();
 
         if out.is_empty() && self.swaps.iter().any(|s| matches_src(s)) {
-            out.push(Some("[SWAP]".to_owned()));
-        }
-        if out.is_empty() {
-            out.push(None);
+            out.push("[SWAP]".to_owned());
         }
         out
     }
@@ -547,32 +540,32 @@ mod tests {
                  23 22 0:21 / /proc rw - proc proc rw\n",
                 "/dev/sda2 partition 400000 0 -2\n",
             );
-        let devs = get_devices_from_sysroot(r.path()).unwrap();
+        let devs = walk(r.path()).unwrap();
 
         // md0 is in-middle (has slaves) so it is not a root
-        assert_eq!(names(&devs.blockdevices), ["sda", "sdb"]);
+        assert_eq!(names(&devs.devices), ["sda", "sdb"]);
 
-        let sda = &devs.blockdevices[0];
+        let sda = &devs.devices[0];
         assert_eq!(sda.maj_min, MajMin::new(8, 0));
         assert_eq!(sda.size, 1_000_000 * 512);
         assert_eq!(sda.device_type, DeviceType::Disk);
-        assert_eq!(sda.mountpoints, vec![None]);
+        assert!(sda.mountpoints.is_empty());
 
-        let kids = sda.children.as_ref().unwrap();
+        let kids = &sda.children;
         assert_eq!(names(kids), ["sda1", "sda2"]);
         assert_eq!(kids[0].device_type, DeviceType::Part);
-        assert_eq!(kids[1].mountpoints, vec![Some("[SWAP]".to_owned())]);
+        assert_eq!(kids[1].mountpoints, ["[SWAP]"]);
 
         let md0 = kids[0].find_child("md0").unwrap();
         assert_eq!(md0.device_type, DeviceType::Raid1);
         assert_eq!(md0.maj_min, MajMin::new(9, 0));
-        assert_eq!(md0.mountpoints, vec![Some("/".to_owned())]);
-        assert!(md0.children.is_none());
+        assert_eq!(md0.mountpoints, ["/"]);
+        assert!(md0.children.is_empty());
 
         // same md0 under sdb1 too
-        assert!(devs.blockdevices[1].find_descendant("md0").is_some());
+        assert!(devs.devices[1].find_descendant("md0").is_some());
         assert!(sda.is_system());
-        assert!(devs.blockdevices[1].is_system());
+        assert!(devs.devices[1].is_system());
     }
 
     #[test]
@@ -596,17 +589,17 @@ mod tests {
             .file("sys/class/block/dm-1/dm/uuid", "LVM-xyz\n")
             .file("sys/class/block/dm-1/slaves/dm-0", "")
             .mounts("30 1 253:1 / / rw - ext4 /dev/mapper/vg0-root rw\n", "");
-        let devs = get_devices_from_sysroot(r.path()).unwrap();
-        assert_eq!(names(&devs.blockdevices), ["nvme0n1"]);
+        let devs = walk(r.path()).unwrap();
+        assert_eq!(names(&devs.devices), ["nvme0n1"]);
 
-        let p2 = devs.blockdevices[0].find_child("nvme0n1p2").unwrap();
+        let p2 = devs.devices[0].find_child("nvme0n1p2").unwrap();
         let crypt = p2.find_child("cryptroot").expect("dm name not dm-0");
         assert_eq!(crypt.device_type, DeviceType::Crypt);
         assert_eq!(crypt.maj_min, MajMin::new(253, 0));
         let lv = crypt.find_child("vg0-root").unwrap();
         assert_eq!(lv.device_type, DeviceType::Lvm);
-        assert_eq!(lv.mountpoints, vec![Some("/".to_owned())]);
-        assert!(devs.blockdevices[0].is_system());
+        assert_eq!(lv.mountpoints, ["/"]);
+        assert!(devs.devices[0].is_system());
     }
 
     #[test]
@@ -619,12 +612,12 @@ mod tests {
             .file("sys/class/block/loop2/loop/backing_file", "/x.img")
             .device("zram0", "253:0", 0)
             .mounts("", "");
-        let devs = get_devices_from_sysroot(r.path()).unwrap();
+        let devs = walk(r.path()).unwrap();
         // sorted by maj:min: loop1 (7:1), loop2 (7:2), zram0 (253:0)
-        assert_eq!(names(&devs.blockdevices), ["loop1", "loop2", "zram0"]);
-        assert_eq!(devs.blockdevices[0].device_type, DeviceType::Loop);
-        assert_eq!(devs.blockdevices[2].device_type, DeviceType::Disk);
-        assert_eq!(devs.blockdevices[2].size, 0);
+        assert_eq!(names(&devs.devices), ["loop1", "loop2", "zram0"]);
+        assert_eq!(devs.devices[0].device_type, DeviceType::Loop);
+        assert_eq!(devs.devices[2].device_type, DeviceType::Disk);
+        assert_eq!(devs.devices[2].size, 0);
     }
 
     #[test]
@@ -637,7 +630,7 @@ mod tests {
             .file("sys/class/block/sr0/device/type", "5\n")
             .file("sys/class/block/sr0/ro", "1")
             .mounts("", "");
-        let devs = get_devices_from_sysroot(r.path()).unwrap();
+        let devs = walk(r.path()).unwrap();
         let sdc = devs.find_by_name("sdc").unwrap();
         assert!(sdc.rm);
         assert!(
@@ -661,22 +654,36 @@ mod tests {
                  22 20 0:50 / /by/source rw - ext4 /dev/cciss/c0d0 rw\n",
                 "",
             );
-        let devs = get_devices_from_sysroot(r.path()).unwrap();
+        let devs = walk(r.path()).unwrap();
         let vda = devs.find_by_name("vda").unwrap();
-        assert_eq!(
-            vda.mountpoints,
-            vec![Some("/mnt/my data".to_owned()), Some("/".to_owned())]
-        );
+        assert_eq!(vda.mountpoints, ["/mnt/my data", "/"]);
         // ! in sysfs names is / in /dev, and source path matching still works
         let cciss = devs.find_by_name("cciss/c0d0").unwrap();
-        assert_eq!(cciss.mountpoints, vec![Some("/by/source".to_owned())]);
+        assert_eq!(cciss.mountpoints, ["/by/source"]);
     }
 
     #[test]
     fn missing_sys_block_is_an_error() {
         let r = FakeRoot::new("empty");
         r.mounts("", "");
-        assert!(get_devices_from_sysroot(r.path()).is_err());
+        let e = walk(r.path()).unwrap_err();
+        assert!(e.to_string().contains("sys/block"), "{e}");
+    }
+
+    #[test]
+    fn missing_mountinfo_is_an_error() {
+        let r = FakeRoot::new("nomnt");
+        r.device("vda", "254:0", 100);
+        let e = walk(r.path()).unwrap_err();
+        assert!(e.to_string().contains("mountinfo"), "{e}");
+    }
+
+    #[test]
+    fn missing_swaps_is_fine() {
+        let r = FakeRoot::new("noswap");
+        r.device("vda", "254:0", 100)
+            .file("proc/self/mountinfo", "");
+        assert_eq!(walk(r.path()).unwrap().len(), 1);
     }
 
     #[test]

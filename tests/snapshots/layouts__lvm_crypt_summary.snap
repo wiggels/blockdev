@@ -1,0 +1,12 @@
+---
+source: tests/layouts.rs
+expression: summary(&parsed)
+---
+[
+  "nvme0n1 [disk] 259:0 size=1024209543168 rm=false ro=false mounts=[] system=true",
+  "nvme0n1p1 [part] 259:1 size=536870912 rm=false ro=false mounts=[\"/boot/efi\"] system=true",
+  "nvme0n1p2 [part] 259:2 size=1023671271424 rm=false ro=false mounts=[] system=true",
+  "cryptroot [crypt] 253:0 size=1023654494208 rm=false ro=false mounts=[] system=true",
+  "vg0-root [lvm] 253:1 size=972800000000 rm=false ro=false mounts=[\"/\"] system=true",
+  "vg0-swap [lvm] 253:2 size=50688000000 rm=false ro=false mounts=[\"[SWAP]\"] system=true"
+]

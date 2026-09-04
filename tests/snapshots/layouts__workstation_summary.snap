@@ -1,0 +1,12 @@
+---
+source: tests/layouts.rs
+expression: summary(&parsed)
+---
+[
+  "loop1 [loop] 7:1 size=68157440 rm=false ro=false mounts=[\"/snap/x/1\"] system=false",
+  "sda [disk] 8:0 size=1000204886016 rm=false ro=false mounts=[] system=true",
+  "sda1 [part] 8:1 size=1000203837440 rm=false ro=false mounts=[\"/\"] system=true",
+  "sdb [disk] 8:16 size=31004295168 rm=true ro=false mounts=[] system=false",
+  "sdb1 [part] 8:17 size=31003246592 rm=true ro=false mounts=[\"/media/hunter/USB STICK\"] system=false",
+  "sr0 [rom] 11:0 size=4294967296 rm=false ro=true mounts=[] system=false"
+]

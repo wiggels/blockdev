@@ -47,11 +47,13 @@ jobs:
       - name: cargo test --release (perf budgets, linux only)
         if: matrix.os == 'ubuntu-latest' && matrix.rust == 'stable'
         run: cargo test --release --test perf_budgets -- --nocapture
-      # the real lsblk smoke test plus sysfs-vs-lsblk equivalence -- only
-      # place we actually have lsblk and a /sys
-      - name: cargo test -- --ignored (lsblk + sysfs live tests, linux only)
+      # live /sys walk plus the walk-vs-lsblk equivalence diff -- only place
+      # we actually have a /sys and an lsblk
+      - name: cargo test -- --ignored (live /sys + lsblk equivalence, linux only)
         if: matrix.os == 'ubuntu-latest' && matrix.rust == 'stable'
-        run: cargo test --lib --locked -- --ignored
+        run: cargo test --all-targets --locked -- --ignored
+      - name: cargo test --features serde
+        run: cargo test --all-targets --locked --features serde
 
   # ---------------------------------------------------------------------------
   # msrv -- keep building on the version we advertise in Cargo.toml
