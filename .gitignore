@@ -1,2 +1,19 @@
-/target
+# cargo build output
+/target/
+
+# Cargo.lock stays committed -- the perf budgets are wall clock tests and
+# dep drift would invalidate the headroom assumptions
+
+# insta pending snapshots -- review artifacts, not committed. the accepted
+# .snap files are, the .new siblings are not
+*.snap.new
+*.pending-snap
+
+# editor scratch
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
 /.claude
