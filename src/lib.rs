@@ -35,7 +35,6 @@
 
 use serde::de::Error as DeError;
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::Value;
 use std::process::Command;
 use std::slice::Iter;
 use std::str::FromStr;
@@ -66,23 +65,38 @@ impl MajMin {
 #[error("invalid maj:min format '{0}': expected '<major>:<minor>'")]
 pub struct ParseMajMinError(String);
 
+/// Parses an ascii decimal into u32 -- no sign, no whitespace, no empty. std's
+/// `str::parse` accepts a leading `+` which lsblk never emits, and this skips
+/// the generic radix machinery. shows up in profiles since every device hits it
+#[inline]
+fn parse_u32_ascii(bytes: &[u8]) -> Option<u32> {
+    if bytes.is_empty() {
+        return None;
+    }
+    let mut n: u32 = 0;
+    for &b in bytes {
+        let d = b.wrapping_sub(b'0');
+        if d > 9 {
+            return None;
+        }
+        n = n.checked_mul(10)?.checked_add(u32::from(d))?;
+    }
+    Some(n)
+}
+
 impl FromStr for MajMin {
     type Err = ParseMajMinError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (major_str, minor_str) = s
-            .split_once(':')
-            .ok_or_else(|| ParseMajMinError(s.to_owned()))?;
-        if minor_str.contains(':') {
-            return Err(ParseMajMinError(s.to_owned()));
-        }
-        let major = major_str
-            .parse()
-            .map_err(|_| ParseMajMinError(s.to_owned()))?;
-        let minor = minor_str
-            .parse()
-            .map_err(|_| ParseMajMinError(s.to_owned()))?;
-        Ok(MajMin { major, minor })
+        // single split then digit-parse both halves -- a second ':' in the
+        // minor half fails the digit check so no separate contains() scan
+        let parsed = s.split_once(':').and_then(|(major, minor)| {
+            Some(MajMin {
+                major: parse_u32_ascii(major.as_bytes())?,
+                minor: parse_u32_ascii(minor.as_bytes())?,
+            })
+        });
+        parsed.ok_or_else(|| ParseMajMinError(s.to_owned()))
     }
 }
 
@@ -256,68 +270,106 @@ fn parse_size_string(s: &str) -> Option<u64> {
         _ => return None,
     };
 
-    // Integer fast path avoids float conversion when the value has no fractional part.
-    if memchr_dot(num_part.as_bytes()).is_none() {
-        let n: u64 = num_part.parse().ok()?;
-        return n.checked_mul(multiplier);
+    // exact decimal math instead of f64 -- "447.1G" is int_part*mult plus
+    // frac*mult/10^k, done in u128 so the frac product cannot overflow. also
+    // avoids the dec2flt cost which was ~2% of parse time
+    let (int_part, frac_part) = match num_part.split_once('.') {
+        Some((i, f)) => (i, f),
+        None => (num_part, ""),
+    };
+    if int_part.is_empty() && frac_part.is_empty() {
+        return None;
     }
 
-    let n: f64 = num_part.parse().ok()?;
-    if n < 0.0 || !n.is_finite() {
-        return None;
+    let mut total: u64 = 0;
+    if !int_part.is_empty() {
+        let n = parse_u64_ascii(int_part.as_bytes())?;
+        total = n.checked_mul(multiplier)?;
     }
-    // Multiplier values are exact powers of two (≤ 2^50), so the cast to f64
-    // is lossless. The product may exceed u64::MAX, in which case `as u64`
-    // saturates to u64::MAX — guard against that.
-    #[allow(clippy::cast_precision_loss)]
-    let multiplier_f = multiplier as f64;
-    let product = n * multiplier_f;
-    #[allow(clippy::cast_precision_loss)]
-    let u64_max_f = u64::MAX as f64;
-    if product < 0.0 || product >= u64_max_f {
-        return None;
+
+    if !frac_part.is_empty() {
+        // more than 19 frac digits cannot affect the result at these
+        // multipliers -- truncate rather than reject. a second '.' in here
+        // fails the digit parse below same as before
+        let frac_bytes = frac_part.as_bytes();
+        let (kept, rest) = frac_bytes.split_at(frac_bytes.len().min(19));
+        if !rest.iter().all(u8::is_ascii_digit) {
+            return None;
+        }
+        let frac = parse_u64_ascii(kept)?;
+        let scale = 10u128.pow(u32::try_from(kept.len()).ok()?);
+        // frac < scale so this is strictly < multiplier and fits u64
+        #[allow(clippy::cast_possible_truncation)]
+        let frac_bytes = ((u128::from(frac) * u128::from(multiplier)) / scale) as u64;
+        total = total.checked_add(frac_bytes)?;
     }
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let bytes = product as u64;
-    Some(bytes)
+
+    Some(total)
 }
 
-/// Returns the position of the first `.` in `bytes`, if any. Avoids a generic
-/// `str::contains` closure overhead in the hot path.
+/// u64 flavor of [`parse_u32_ascii`] -- same rules
 #[inline]
-fn memchr_dot(bytes: &[u8]) -> Option<usize> {
-    bytes.iter().position(|&b| b == b'.')
+fn parse_u64_ascii(bytes: &[u8]) -> Option<u64> {
+    if bytes.is_empty() {
+        return None;
+    }
+    let mut n: u64 = 0;
+    for &b in bytes {
+        let d = b.wrapping_sub(b'0');
+        if d > 9 {
+            return None;
+        }
+        n = n.checked_mul(10)?.checked_add(u64::from(d))?;
+    }
+    Some(n)
 }
 
 /// Custom deserializer that accepts either a numeric byte value (as emitted
 /// when `lsblk --bytes` is used) or a human-readable size string (the default).
+///
+/// Implemented as a direct visitor rather than going through `serde_json::Value`
+/// -- the Value round trip was the dominant cost in parsing, since it allocates
+/// an intermediate tree for every `size` field and then re-dispatches on it.
 fn deserialize_size<'de, D>(deserializer: D) -> Result<u64, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let value = Value::deserialize(deserializer)?;
-    match &value {
-        Value::Number(n) => n
-            .as_u64()
-            .or_else(|| {
-                n.as_f64().and_then(|f| {
-                    #[allow(clippy::cast_precision_loss)]
-                    let u64_max_f = u64::MAX as f64;
-                    if f >= 0.0 && f.is_finite() && f < u64_max_f {
-                        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                        let v = f as u64;
-                        Some(v)
-                    } else {
-                        None
-                    }
-                })
-            })
-            .ok_or_else(|| DeError::custom("invalid numeric size")),
-        Value::String(s) => {
-            parse_size_string(s).ok_or_else(|| DeError::custom(format!("invalid size string: {s}")))
+    struct SizeVisitor;
+
+    impl serde::de::Visitor<'_> for SizeVisitor {
+        type Value = u64;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("a byte count or a human-readable size string like \"3.5T\"")
         }
-        _ => Err(DeError::custom("size must be a number or string")),
+
+        fn visit_u64<E: DeError>(self, v: u64) -> Result<u64, E> {
+            Ok(v)
+        }
+
+        fn visit_i64<E: DeError>(self, v: i64) -> Result<u64, E> {
+            u64::try_from(v).map_err(|_| E::custom("size must be non-negative"))
+        }
+
+        fn visit_f64<E: DeError>(self, f: f64) -> Result<u64, E> {
+            // lsblk never emits floats for --bytes but be lenient -- same
+            // saturation guard as the string path
+            #[allow(clippy::cast_precision_loss)]
+            let u64_max_f = u64::MAX as f64;
+            if f >= 0.0 && f.is_finite() && f < u64_max_f {
+                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                Ok(f as u64)
+            } else {
+                Err(E::custom("invalid numeric size"))
+            }
+        }
+
+        fn visit_str<E: DeError>(self, s: &str) -> Result<u64, E> {
+            parse_size_string(s).ok_or_else(|| E::custom(format!("invalid size string: {s}")))
+        }
     }
+
+    deserializer.deserialize_any(SizeVisitor)
 }
 
 /// Custom deserializer that supports both a single mountpoint (which may be
@@ -326,17 +378,55 @@ where
 /// `lsblk` versions prior to 2.37 emitted a singular `"mountpoint"` field;
 /// newer versions emit `"mountpoints"` as an array. This deserializer makes the
 /// in-memory representation uniform: always a `Vec<Option<String>>`.
+///
+/// Like [`deserialize_size`] this is a direct visitor -- no intermediate
+/// `serde_json::Value`, strings land straight in the output vec.
 fn deserialize_mountpoints<'de, D>(deserializer: D) -> Result<Vec<Option<String>>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let value = Value::deserialize(deserializer)?;
-    if value.is_array() {
-        serde_json::from_value(value).map_err(DeError::custom)
-    } else {
-        let single: Option<String> = serde_json::from_value(value).map_err(DeError::custom)?;
-        Ok(vec![single])
+    struct MountpointsVisitor;
+
+    impl<'de> serde::de::Visitor<'de> for MountpointsVisitor {
+        type Value = Vec<Option<String>>;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("a mountpoint string, null, or an array of those")
+        }
+
+        // legacy single "mountpoint": "/" -- or null below
+        fn visit_str<E: DeError>(self, s: &str) -> Result<Self::Value, E> {
+            Ok(vec![Some(s.to_owned())])
+        }
+
+        fn visit_string<E: DeError>(self, s: String) -> Result<Self::Value, E> {
+            Ok(vec![Some(s)])
+        }
+
+        fn visit_none<E: DeError>(self) -> Result<Self::Value, E> {
+            Ok(vec![None])
+        }
+
+        fn visit_unit<E: DeError>(self) -> Result<Self::Value, E> {
+            Ok(vec![None])
+        }
+
+        // modern "mountpoints": [...]
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: serde::de::SeqAccess<'de>,
+        {
+            // most devices have exactly one entry -- size_hint is None for
+            // json though so default to 1 and let it grow if needed
+            let mut out = Vec::with_capacity(seq.size_hint().unwrap_or(1));
+            while let Some(m) = seq.next_element::<Option<String>>()? {
+                out.push(m);
+            }
+            Ok(out)
+        }
     }
+
+    deserializer.deserialize_any(MountpointsVisitor)
 }
 
 /// Represents a single block device as reported by `lsblk`.
@@ -696,6 +786,15 @@ mod tests {
         assert!("-1:0".parse::<MajMin>().is_err());
         // u32 overflow
         assert!("4294967296:0".parse::<MajMin>().is_err());
+        assert_eq!(
+            "4294967295:0".parse::<MajMin>().unwrap(),
+            MajMin::new(u32::MAX, 0)
+        );
+        // std parse would take these, lsblk never emits them
+        assert!("+8:0".parse::<MajMin>().is_err());
+        assert!(" 8:0".parse::<MajMin>().is_err());
+        assert!("8:".parse::<MajMin>().is_err());
+        assert!(":0".parse::<MajMin>().is_err());
     }
 
     #[test]
@@ -736,6 +835,22 @@ mod tests {
         assert_eq!(parse_size_string("-1G"), None);
         // overflow guard
         assert_eq!(parse_size_string("999999999999P"), None);
+        // decimal edge cases -- exact math not f64 now
+        assert_eq!(parse_size_string("447.1G"), Some(480_069_969_510));
+        assert_eq!(parse_size_string("1.5K"), Some(1536));
+        assert_eq!(parse_size_string(".5K"), Some(512));
+        assert_eq!(parse_size_string("1.K"), Some(1024));
+        assert_eq!(parse_size_string("0.000000000000000000001K"), Some(0));
+        assert_eq!(parse_size_string("."), None);
+        assert_eq!(parse_size_string(".G"), None);
+        assert_eq!(parse_size_string("1.2.3G"), None);
+        assert_eq!(parse_size_string("1..2G"), None);
+        assert_eq!(parse_size_string("+1G"), None);
+        // frac truncates so u64::MAX + 0.9 still fits, but scaling it does not
+        assert_eq!(parse_size_string("18446744073709551615.9"), Some(u64::MAX));
+        assert_eq!(parse_size_string("18446744073709551615"), Some(u64::MAX));
+        assert_eq!(parse_size_string("18446744073709551615.9K"), None);
+        assert_eq!(parse_size_string("18446744073709551616"), None);
     }
 
     #[test]
