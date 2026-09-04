@@ -109,10 +109,13 @@ jobs:
         # bencher format emits the `test ... bench:` lines the action reads
         run: cargo bench --bench devices -- --output-format bencher | tee output.txt
 
-      - name: Store result on gh-pages
+      # raw ns -- continues the existing "Benchmark" series. honest numbers
+      # but they mostly record which speed class of runner the job landed on
+      - name: Store raw result on gh-pages
         if: github.event_name == 'push'
         uses: benchmark-action/github-action-benchmark@v1
         with:
+          name: Benchmark
           tool: cargo
           output-file-path: output.txt
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -120,6 +123,25 @@ jobs:
           # history only -- the same runner a/b above is the gate. cross run
           # comparisons swing 2-3x with runner hardware and would only alert
           # on noise
+          fail-on-alert: false
+          comment-on-alert: false
+          summary-always: true
+
+      # each bench divided by a fixed work calibration bench from the same
+      # run -- this is the series that shows code changes, not hardware
+      - name: Normalize by calibration benches
+        if: github.event_name == 'push'
+        run: python3 .github/scripts/normalize-bench.py output.txt | tee normalized.json
+
+      - name: Store normalized result on gh-pages
+        if: github.event_name == 'push'
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Normalized (x calibration, lower is better)
+          tool: customSmallerIsBetter
+          output-file-path: normalized.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
           fail-on-alert: false
           comment-on-alert: false
           summary-always: true
