@@ -1,7 +1,12 @@
 # blockdev
 
+[![CI](https://github.com/wiggels/blockdev/actions/workflows/ci.yml/badge.svg)](https://github.com/wiggels/blockdev/actions/workflows/ci.yml)
+[![Audit](https://github.com/wiggels/blockdev/actions/workflows/audit.yml/badge.svg)](https://github.com/wiggels/blockdev/actions/workflows/audit.yml)
+[![Benchmarks](https://github.com/wiggels/blockdev/actions/workflows/bench.yml/badge.svg)](https://github.com/wiggels/blockdev/actions/workflows/bench.yml)
+[![Coverage](https://codecov.io/gh/wiggels/blockdev/branch/main/graph/badge.svg)](https://codecov.io/gh/wiggels/blockdev)
 [![Crates.io](https://img.shields.io/crates/v/blockdev.svg)](https://crates.io/crates/blockdev)
 [![Documentation](https://docs.rs/blockdev/badge.svg)](https://docs.rs/blockdev)
+[![MSRV](https://img.shields.io/badge/rustc-1.85+-blue.svg)](https://blog.rust-lang.org/)
 [![License](https://img.shields.io/crates/l/blockdev.svg)](https://github.com/wiggels/blockdev/blob/main/LICENSE)
 
 A lightweight Rust library for parsing and working with `lsblk --json` output on Linux. Provides type-safe block device representation with utilities for inspecting device properties, filtering system devices, and iterating over device hierarchies.
@@ -22,7 +27,7 @@ Add `blockdev` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-blockdev = "0.3"
+blockdev = "0.4"
 ```
 
 ## Quick Start
@@ -249,6 +254,51 @@ Error type for library operations:
 
 - Linux operating system (for `lsblk` command)
 - `lsblk` with JSON output support (util-linux 2.27+)
+- Rust 1.85+ (MSRV, verified in CI)
+
+`parse_lsblk` and every type/filter in the crate are pure and work on any
+platform. Only `get_devices()` needs a real `lsblk`.
+
+## Performance
+
+Parsing is a single pass through `serde_json` straight into the typed structs.
+The `size` and `mountpoints` fields use direct serde visitors rather than an
+intermediate `serde_json::Value`, and human-readable sizes like `447.1G` are
+computed with exact integer math instead of `f64`. On a 2024 laptop a
+realistic 10-disk `lsblk` dump parses in roughly 20 µs.
+
+### Regression detection
+
+Three layers of defense against perf regressions:
+
+1. **Committed perf-budget tests** (`tests/perf_budgets.rs`) -- wall-clock
+   bounds with 20-50x headroom, run as part of `cargo test` on any machine.
+   They catch catastrophic regressions without any CI setup.
+
+   ```sh
+   cargo test --release --test perf_budgets -- --nocapture
+   ```
+
+2. **CI-side benchmark comparison** (`.github/workflows/bench.yml`) -- runs
+   `cargo bench` on every PR, compares against the `main` baseline stored on
+   the `gh-pages` branch, and **fails the build** if anything regresses by
+   more than 25%. Posts a comment on the PR with the diff. History is
+   plotted at the repo's GitHub Pages site under `/dev/bench/`. Powered by
+   [`benchmark-action/github-action-benchmark`](https://github.com/benchmark-action/github-action-benchmark).
+
+3. **Local criterion baselines** (`benches/parse.rs`) -- for fine-grained
+   work on a single machine:
+
+   ```sh
+   cargo bench --bench parse -- --save-baseline main
+   # ... make changes ...
+   cargo bench --bench parse -- --baseline main
+   ```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the PR checklist, commit
+conventions, and the release process.
 
 ## License
 
