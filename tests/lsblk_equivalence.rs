@@ -77,7 +77,7 @@ fn blank_ids_where_lsblk_is_null(ours: &mut BlockDevice, theirs: &BlockDevice) {
     // ID_MODEL ("Virtual_Disk"). we report the human form; compare modulo that
     if let (Some(o), Some(t)) = (&mut ours.model, &theirs.model) {
         if o.replace('_', " ") == t.replace('_', " ") {
-            *o = t.clone();
+            o.clone_from(t);
         }
     }
     for (o, t) in ours.children.iter_mut().zip(&theirs.children) {
