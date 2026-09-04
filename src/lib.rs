@@ -23,6 +23,14 @@
 //! # Ok::<(), blockdev::BlockDevError>(())
 //! ```
 //!
+//! ## Identifiers
+//!
+//! Names like `sda` are not stable across boots. Every device also carries
+//! `uuid`, `partuuid`, `fstype`, `label`, `partlabel`, `wwn`, `serial`, and
+//! `model`, read from the udev database at `/run/udev/data` with sysfs
+//! fallbacks for `serial`, `model`, and `wwn`. Where udev is not running the
+//! udev-only fields are `None`; the crate never probes device contents.
+//!
 //! ## Other roots
 //!
 //! [`get_devices_at`] takes the directory that holds `sys/` and `proc/`. Point
@@ -293,6 +301,28 @@ pub struct BlockDevice {
     pub mountpoints: Vec<String>,
     /// Partitions and holders, sorted by [`MajMin`]. Empty for leaves.
     pub children: Vec<BlockDevice>,
+    /// Filesystem UUID, as `lsblk`'s `UUID` column. Comes from the udev
+    /// database, so it is `None` where udev is not running.
+    pub uuid: Option<String>,
+    /// GPT or MBR partition entry UUID, as `PARTUUID`. udev only.
+    pub partuuid: Option<String>,
+    /// Filesystem type (`"ext4"`, `"vfat"`, `"crypto_LUKS"`, ...), as
+    /// `FSTYPE`. udev only.
+    pub fstype: Option<String>,
+    /// Filesystem label, as `LABEL`. udev only.
+    pub label: Option<String>,
+    /// GPT partition name, as `PARTLABEL`. udev only.
+    pub partlabel: Option<String>,
+    /// World Wide Name or other unique storage identifier, as `WWN`. udev
+    /// first, then the `wwid` sysfs attribute.
+    pub wwn: Option<String>,
+    /// Disk serial number, as `SERIAL`. Whole disks only, like `lsblk`:
+    /// `None` on partitions and on anything stacked on other devices.
+    /// udev first, then the `device/serial` and `serial` sysfs attributes.
+    pub serial: Option<String>,
+    /// Device model, as `MODEL`. Whole disks only. udev first, then the
+    /// `device/model` sysfs attribute.
+    pub model: Option<String>,
 }
 
 impl BlockDevice {
@@ -503,6 +533,14 @@ mod tests {
             device_type: ty,
             mountpoints: Vec::new(),
             children: Vec::new(),
+            uuid: None,
+            partuuid: None,
+            fstype: None,
+            label: None,
+            partlabel: None,
+            wwn: None,
+            serial: None,
+            model: None,
         }
     }
 

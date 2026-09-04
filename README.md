@@ -23,6 +23,7 @@ result is identical to `lsblk --json --bytes` on a live machine.
 - **Type-safe tree** - `BlockDevices` / `BlockDevice` / `DeviceType` / `MajMin`
 - **Same answer as lsblk** - roots, partitions, holders, types, mountpoints, swap, ordering
 - **System device detection** - find the disk holding `/`, through any stack depth
+- **Stable identifiers** - `uuid`, `partuuid`, `fstype`, `label`, `wwn`, `serial`, `model` from the udev database, with sysfs fallbacks
 - **Alternate sysroots** - point it at a bind-mounted host `/sys` from a container, or a fake tree in tests
 - **Idiomatic iteration** - `IntoIterator`, pre-order `descendants()`, iterator and `Vec` flavors of every filter
 
@@ -121,6 +122,27 @@ fn main() -> Result<(), blockdev::BlockDevError> {
 }
 ```
 
+### Find a device by UUID, not by name
+
+```rust
+use blockdev::get_devices;
+
+fn main() -> Result<(), blockdev::BlockDevError> {
+    let devices = get_devices()?;
+
+    // sda can be sdb tomorrow -- the filesystem uuid cannot
+    let target = devices
+        .iter_all()
+        .find(|d| d.uuid.as_deref() == Some("3f1a2b4c-0000-4000-8000-0000deadbeef"));
+
+    if let Some(part) = target {
+        println!("{} is {:?} on wwn {:?}", part.name, part.fstype, part.wwn);
+    }
+
+    Ok(())
+}
+```
+
 ### Another sysroot
 
 ```rust
@@ -171,6 +193,14 @@ The top-level devices, sorted by `maj:min`.
 | `device_type` | `DeviceType` | Type of device |
 | `mountpoints` | `Vec<String>` | Every mountpoint, newest first; `"[SWAP]"` for active swap; empty if unmounted |
 | `children` | `Vec<BlockDevice>` | Partitions and holders, sorted by `maj:min` |
+| `uuid` | `Option<String>` | Filesystem UUID (udev) |
+| `partuuid` | `Option<String>` | Partition entry UUID (udev) |
+| `fstype` | `Option<String>` | Filesystem type, e.g. `ext4`, `crypto_LUKS` (udev) |
+| `label` | `Option<String>` | Filesystem label (udev) |
+| `partlabel` | `Option<String>` | GPT partition name (udev) |
+| `wwn` | `Option<String>` | World Wide Name (udev, then sysfs `wwid`) |
+| `serial` | `Option<String>` | Disk serial; whole disks only (udev, then sysfs) |
+| `model` | `Option<String>` | Disk model; whole disks only (udev, then sysfs) |
 
 | Method | Description |
 |--------|-------------|
@@ -214,6 +244,11 @@ torn down mid-walk does not fail the call. The enum is `#[non_exhaustive]`.
   `disk`.
 - Mountpoints are every `/proc/self/mountinfo` entry matching by `maj:min`
   or source path, newest first, then `/proc/swaps`.
+- Identifiers come from udev's database at `/run/udev/data/b<maj>:<min>`,
+  using the same property names and priority `lsblk` uses through libudev.
+  `wwn`, `serial`, and `model` fall back to sysfs attributes. Without udev
+  the filesystem-level fields are `None`; the crate never reads device
+  contents the way `blkid` does.
 
 See [docs/sysfs-backend.md](docs/sysfs-backend.md) for the full mapping
 and what is not covered.

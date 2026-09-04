@@ -1,0 +1,13 @@
+---
+source: tests/layouts.rs
+expression: identifiers(&parsed)
+---
+[
+  "sda wwn=0x50014ee2b1a2c3d4 serial=WD-WCC1A1 model=WDC_WD5000AAKX",
+  "sda1 uuid=a1b2c3d4-e5f6-7890-abcd-ef1234567890 partuuid=11111111-01 fstype=linux_raid_member",
+  "sda2 uuid=5a5a5a5a-1111-2222-3333-444444444444 partuuid=11111111-02 fstype=swap",
+  "md1 uuid=0f0f0f0f-aaaa-bbbb-cccc-dddddddddddd fstype=ext4 label=root fs",
+  "sdb wwn=0x50014ee2b1a2c3d5 serial=WD-WCC1A2 model=WDC_WD5000AAKX",
+  "md1 uuid=0f0f0f0f-aaaa-bbbb-cccc-dddddddddddd fstype=ext4 label=root fs",
+  "nvme0n1 uuid=deadbeef-0000-0000-0000-000000000000 fstype=xfs serial=S4EVNX0N1 model=Samsung SSD 980"
+]
