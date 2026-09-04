@@ -73,6 +73,13 @@ fn blank_ids_where_lsblk_is_null(ours: &mut BlockDevice, theirs: &BlockDevice) {
         ($($f:ident),*) => { $( if theirs.$f.is_none() { ours.$f = None; } )* };
     }
     align!(uuid, partuuid, fstype, label, partlabel, wwn, serial, model);
+    // lsblk 2.39 reads model from sysfs ("Virtual Disk"), 2.40+ from udev's
+    // ID_MODEL ("Virtual_Disk"). we report the human form; compare modulo that
+    if let (Some(o), Some(t)) = (&mut ours.model, &theirs.model) {
+        if o.replace('_', " ") == t.replace('_', " ") {
+            *o = t.clone();
+        }
+    }
     for (o, t) in ours.children.iter_mut().zip(&theirs.children) {
         blank_ids_where_lsblk_is_null(o, t);
     }

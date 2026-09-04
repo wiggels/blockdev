@@ -47,9 +47,13 @@ pub(crate) fn walk(root: &Path) -> Result<BlockDevices, BlockDevError> {
         source,
     })?;
 
+    let udev_data = root.join("run/udev/data");
     let walker = Walker {
         class_block: root.join("sys/class/block"),
-        udev_data: root.join("run/udev/data"),
+        // one stat up front -- no udev means no db reads at all, not one
+        // failed open per device
+        udev_present: udev_data.is_dir(),
+        udev_data,
         mounts: MountTable::load(root)?,
     };
 
@@ -72,6 +76,7 @@ pub(crate) fn walk(root: &Path) -> Result<BlockDevices, BlockDevError> {
 struct Walker {
     class_block: PathBuf,
     udev_data: PathBuf,
+    udev_present: bool,
     mounts: MountTable,
 }
 
@@ -140,9 +145,25 @@ impl Walker {
             .mounts
             .lookup(maj_min, &name, kname, mapper_path.as_deref());
 
+        // whole disks get one readdir -- it finds the partitions and it says
+        // which optional attrs exist so the identifier lookups never open
+        // things that are not there. partitions skip it, they have no
+        // wwid/serial/device entries and lsblk does not look either
+        let listing: Vec<String> = if is_part {
+            Vec::new()
+        } else {
+            fs::read_dir(dir)
+                .map(|d| {
+                    d.flatten()
+                        .filter_map(|e| e.file_name().into_string().ok())
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+
         // serial and model are whole-disk things -- lsblk blanks them on
         // partitions and on anything w/ slaves, and only roots have neither
-        let ids = self.identifiers(maj_min, dir, matches!(via, Root));
+        let ids = self.identifiers(maj_min, dir, matches!(via, Root), &listing);
 
         let mut children = Vec::new();
         if depth < MAX_DEPTH {
@@ -151,7 +172,7 @@ impl Walker {
                 rm,
             };
             if !is_part {
-                self.partitions(kname, dir, &me, depth, &mut children);
+                self.partitions(kname, dir, &listing, &me, depth, &mut children);
             }
             self.holders(dir, depth, &mut children);
         }
@@ -178,34 +199,65 @@ impl Walker {
     }
 
     /// udev db first -- same keys and priority as lsblk's properties.c --
-    /// then sysfs attributes for what the kernel exposes on its own
-    fn identifiers(&self, maj_min: MajMin, dir: &Path, whole_disk: bool) -> Identifiers {
-        let mut ids = Identifiers::from_udev_db(
-            &self
-                .udev_data
-                .join(format!("b{}:{}", maj_min.major, maj_min.minor)),
-        );
+    /// then sysfs attributes for what the kernel exposes on its own.
+    /// `listing` is the device dir's entries, empty for partitions
+    fn identifiers(
+        &self,
+        maj_min: MajMin,
+        dir: &Path,
+        whole_disk: bool,
+        listing: &[String],
+    ) -> Identifiers {
+        let has = |name: &str| listing.iter().any(|e| e == name);
+
+        let mut ids = if self.udev_present {
+            Identifiers::from_udev_db(
+                &self
+                    .udev_data
+                    .join(format!("b{}:{}", maj_min.major, maj_min.minor)),
+            )
+        } else {
+            Identifiers::default()
+        };
+
         if ids.wwn.is_none() {
             // nvme puts wwid on the block dir, scsi under device/
-            ids.wwn = read_trimmed(&dir.join("wwid"))
-                .or_else(|| read_trimmed(&dir.join("device/wwid")))
-                .filter(|s| !s.is_empty());
+            if has("wwid") {
+                ids.wwn = read_trimmed(&dir.join("wwid")).filter(|s| !s.is_empty());
+            }
+            if ids.wwn.is_none() && has("device") {
+                ids.wwn = read_trimmed(&dir.join("device/wwid")).filter(|s| !s.is_empty());
+            }
         }
+
         if whole_disk {
             if ids.serial.is_none() {
                 // device/serial is what lsblk reads. virtio-blk exposes it as
                 // a plain `serial` on the block dir instead
-                ids.serial = read_trimmed(&dir.join("device/serial"))
-                    .or_else(|| read_trimmed(&dir.join("serial")))
-                    .filter(|s| !s.is_empty());
+                if has("device") {
+                    ids.serial = read_trimmed(&dir.join("device/serial")).filter(|s| !s.is_empty());
+                }
+                if ids.serial.is_none() && has("serial") {
+                    ids.serial = read_trimmed(&dir.join("serial")).filter(|s| !s.is_empty());
+                }
             }
+            // model: ID_MODEL_ENC unmangled, then the kernel's own string,
+            // then udev's space-to-underscore ID_MODEL as a last resort.
+            // lsblk 2.39 reads only sysfs, 2.40+ reads ID_MODEL first -- the
+            // two disagree on "Virtual Disk" vs "Virtual_Disk", we go human
             if ids.model.is_none() {
-                ids.model = read_trimmed(&dir.join("device/model")).filter(|s| !s.is_empty());
+                if has("device") {
+                    ids.model = read_trimmed(&dir.join("device/model")).filter(|s| !s.is_empty());
+                }
+                if ids.model.is_none() {
+                    ids.model = ids.model_mangled.take();
+                }
             }
         } else {
             ids.serial = None;
             ids.model = None;
         }
+        ids.model_mangled = None;
         ids
     }
 
@@ -214,22 +266,16 @@ impl Walker {
         &self,
         disk: &str,
         dir: &Path,
+        listing: &[String],
         me: &Parent,
         depth: usize,
         out: &mut Vec<BlockDevice>,
     ) {
-        let Ok(entries) = fs::read_dir(dir) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let fname = entry.file_name();
-            let Some(fname) = fname.to_str() else {
-                continue;
-            };
+        for fname in listing {
             if !is_partition_name(disk, fname) {
                 continue;
             }
-            let pdir = entry.path();
+            let pdir = dir.join(fname);
             let Some(maj_min) = read_majmin(&pdir) else {
                 continue;
             };
@@ -348,7 +394,11 @@ struct Identifiers {
     partlabel: Option<String>,
     wwn: Option<String>,
     serial: Option<String>,
+    /// `ID_MODEL_ENC` unmangled -- the human readable form
     model: Option<String>,
+    /// `ID_MODEL` -- udev swaps spaces for underscores. only used when nothing
+    /// better exists
+    model_mangled: Option<String>,
 }
 
 impl Identifiers {
@@ -382,7 +432,8 @@ impl Identifiers {
                 "ID_PART_ENTRY_NAME" => &mut ids.partlabel,
                 "ID_PART_ENTRY_UUID" => &mut ids.partuuid,
                 "ID_FS_TYPE" => &mut ids.fstype,
-                "ID_MODEL" => &mut ids.model,
+                "ID_MODEL_ENC" => &mut ids.model,
+                "ID_MODEL" => &mut ids.model_mangled,
                 // WITH_EXTENSION wins over ID_WWN whichever comes first
                 "ID_WWN_WITH_EXTENSION" => {
                     ids.wwn = Some(value.to_owned());
@@ -409,7 +460,7 @@ impl Identifiers {
             if slot.is_none() {
                 let mangled = matches!(
                     key,
-                    "ID_FS_UUID_ENC" | "ID_FS_LABEL_ENC" | "ID_PART_ENTRY_NAME"
+                    "ID_FS_UUID_ENC" | "ID_FS_LABEL_ENC" | "ID_PART_ENTRY_NAME" | "ID_MODEL_ENC"
                 );
                 *slot = Some(if mangled {
                     unhexmangle(value)
@@ -888,6 +939,7 @@ mod tests {
             .mounts("", "");
         let devs = walk(r.path()).unwrap();
         let sda = devs.find_by_name("sda").unwrap();
+        // no ENC and no sysfs model -> udev's underscored form is all we have
         assert_eq!(sda.model.as_deref(), Some("Samsung_SSD_870"));
         assert_eq!(
             sda.serial.as_deref(),
@@ -912,6 +964,32 @@ mod tests {
         assert_eq!(p.partuuid.as_deref(), Some("0a1b2c3d-01"));
         assert!(p.serial.is_none(), "partitions never carry serial");
         assert!(p.model.is_none());
+    }
+
+    #[test]
+    fn model_prefers_unmangled_forms_over_udev_id_model() {
+        let r = FakeRoot::new("model");
+        r.device("sda", "8:0", 100)
+            .udev(
+                "8:0",
+                &[
+                    ("ID_MODEL", "Virtual_Disk"),
+                    ("ID_MODEL_ENC", "Virtual\\x20Disk"),
+                ],
+            )
+            .device("sdb", "8:16", 100)
+            .file("sys/class/block/sdb/device/model", "Virtual Disk    \n")
+            .udev("8:16", &[("ID_MODEL", "Virtual_Disk")])
+            .mounts("", "");
+        let devs = walk(r.path()).unwrap();
+        assert_eq!(
+            devs.find_by_name("sda").unwrap().model.as_deref(),
+            Some("Virtual Disk")
+        );
+        assert_eq!(
+            devs.find_by_name("sdb").unwrap().model.as_deref(),
+            Some("Virtual Disk")
+        );
     }
 
     #[test]
