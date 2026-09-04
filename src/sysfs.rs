@@ -462,11 +462,20 @@ impl Identifiers {
                     key,
                     "ID_FS_UUID_ENC" | "ID_FS_LABEL_ENC" | "ID_PART_ENTRY_NAME" | "ID_MODEL_ENC"
                 );
-                *slot = Some(if mangled {
+                let mut v = if mangled {
                     unhexmangle(value)
                 } else {
                     value.to_owned()
-                });
+                };
+                // ID_MODEL_ENC is the raw inquiry string, space padded to
+                // its fixed width -- "Virtual Disk    ". udev trims it for
+                // ID_MODEL and lsblk shows sysfs trimmed, so trim here too.
+                // labels keep their whitespace, that is user data
+                if key == "ID_MODEL_ENC" {
+                    let keep = v.trim_end().len();
+                    v.truncate(keep);
+                }
+                *slot = Some(v);
             }
         }
         if ids.uuid.is_none() {
@@ -981,10 +990,23 @@ mod tests {
             .file("sys/class/block/sdb/device/model", "Virtual Disk    \n")
             .udev("8:16", &[("ID_MODEL", "Virtual_Disk")])
             .mounts("", "");
+        // padded inquiry string via ENC -- what azure / hyper-v disks emit
+        r.device("sdc", "8:32", 100).udev(
+            "8:32",
+            &[
+                ("ID_MODEL", "Virtual_Disk"),
+                ("ID_MODEL_ENC", "Virtual\\x20Disk\\x20\\x20\\x20\\x20"),
+            ],
+        );
         let devs = walk(r.path()).unwrap();
         assert_eq!(
             devs.find_by_name("sda").unwrap().model.as_deref(),
             Some("Virtual Disk")
+        );
+        assert_eq!(
+            devs.find_by_name("sdc").unwrap().model.as_deref(),
+            Some("Virtual Disk"),
+            "trailing pad stripped"
         );
         assert_eq!(
             devs.find_by_name("sdb").unwrap().model.as_deref(),
