@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788555688690,
+  "lastUpdate": 1788556444232,
   "repoUrl": "https://github.com/wiggels/blockdev",
   "entries": {
     "Benchmark": [
@@ -287,6 +287,72 @@ window.BENCHMARK_DATA = {
             "name": "filters/system_filter_256",
             "value": 663,
             "range": "± 19",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "wiggels@gmail.com",
+            "name": "Hunter Wigelsworth",
+            "username": "wiggels"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f58435a55c3f3ad496a05d7d7022e914d07d489e",
+          "message": "Merge pull request #4 from wiggels/sysfs-backend\n\nfeat!: walk /sys directly, drop lsblk and JSON parsing",
+          "timestamp": "2026-09-04T16:12:02-05:00",
+          "tree_id": "640037a38374d1052017934fa32500140b6f2f0c",
+          "url": "https://github.com/wiggels/blockdev/commit/f58435a55c3f3ad496a05d7d7022e914d07d489e"
+        },
+        "date": 1788556443749,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "walk/disks/16",
+            "value": 1155301,
+            "range": "± 25853",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "walk/disks/256",
+            "value": 18753807,
+            "range": "± 572561",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "filters/system_256",
+            "value": 3393,
+            "range": "± 141",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "filters/find_by_name_miss_256",
+            "value": 104,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "filters/find_anywhere_miss_256",
+            "value": 3279,
+            "range": "± 104",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "live/get_devices",
+            "value": 694112,
+            "range": "± 3866",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "live/lsblk_spawn_reference",
+            "value": 2910734,
+            "range": "± 26322",
             "unit": "ns/iter"
           }
         ]
