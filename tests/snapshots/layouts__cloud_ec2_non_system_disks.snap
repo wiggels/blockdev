@@ -1,5 +1,5 @@
 ---
-source: tests/snapshots.rs
+source: tests/layouts.rs
 expression: candidates
 ---
 [

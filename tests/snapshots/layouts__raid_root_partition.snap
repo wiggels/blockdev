@@ -1,10 +1,11 @@
 ---
-source: tests/snapshots.rs
+source: tests/layouts.rs
 expression: "(system, non_system)"
 ---
 [
   [
-    "sda"
+    "sda",
+    "sdb"
   ],
   [
     "nvme0n1"

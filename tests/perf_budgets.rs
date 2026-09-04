@@ -9,18 +9,11 @@
 //! ## design
 //!
 //! each test does N iters and takes the best of three batch averages. min of
-//! batches defends against scheduler noise -- one preemption can inflate a
-//! batch by orders of magnitude when the per call cost is microseconds but
-//! it basically never hits all three. budgets are set ~20-50x above what a
-//! 2024 commodity laptop measures in release so:
-//!
-//! * slow ci runners and debug builds do not false positive
-//! * a real algorithmic regression -- say size parsing going back through
-//!   `serde_json::Value`, or `is_system` going quadratic -- does trip them
-//!
-//! treat these as a "did we just shoot ourselves in the foot" signal, not a
-//! precision instrument. precise regression detection is the criterion
-//! benches in benches/parse.rs plus the ci bench workflow
+//! batches defends against scheduler noise. the walk is pure syscalls so the
+//! numbers swing a lot between machines -- a firecracker vm pays ~4us per
+//! syscall, bare metal well under 1us -- so budgets sit ~20x above the slow
+//! case and still trip on a real regression like reading every attribute
+//! twice or going quadratic on holders
 //!
 //! ## running
 //!
@@ -30,16 +23,12 @@
 //! cargo test --release --test perf_budgets -- --nocapture
 //! ```
 
-use std::fmt::Write as _;
+mod common;
+
 use std::time::{Duration, Instant};
 
-use blockdev::parse_lsblk;
-
-const SMALL_FIXTURE: &str = include_str!("../benches/fixtures/small.json");
-
-// ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
+use blockdev::get_devices_at;
+use common::FakeRoot;
 
 /// run op iters times, three batches, return the min per call average
 fn measure<F: FnMut()>(iters: u32, mut op: F) -> Duration {
@@ -68,57 +57,34 @@ fn assert_under(name: &str, observed: Duration, budget: Duration) {
     );
 }
 
-/// same shape as the criterion large fixture -- n disks each w/ one partition,
-/// human readable sizes so the string path is exercised
-fn large_fixture(n_disks: usize) -> String {
-    let mut s = String::from("{\"blockdevices\":[");
-    for i in 0..n_disks {
-        if i > 0 {
-            s.push(',');
-        }
-        write!(
-            s,
-            "{{\"name\":\"nvme{i}n1\",\"maj:min\":\"259:{i}\",\"rm\":false,\
-             \"size\":\"3.5T\",\"ro\":false,\"type\":\"disk\",\"mountpoints\":[null],\
-             \"children\":[\
-               {{\"name\":\"nvme{i}n1p1\",\"maj:min\":\"259:{i}\",\
-                 \"rm\":false,\"size\":\"447.1G\",\"ro\":false,\"type\":\"part\",\
-                 \"mountpoints\":[null]}}\
-             ]}}",
-        )
-        .unwrap();
-    }
-    s.push_str("]}");
-    s
-}
-
-// ---------------------------------------------------------------------------
-// budgets
-//
-// observed on a 2024 laptop in release: small ~25us, 256 disks ~280us,
-// system() on 256 ~1.7us. debug is roughly 5-10x slower and still fits
-// ---------------------------------------------------------------------------
+// observed on a firecracker vm in release: 16 disks ~1ms, 256 disks ~15ms.
+// on a laptop expect roughly a fifth of that
 
 #[test]
-fn parse_small_realistic_under_2ms() {
-    let t = measure(200, || {
-        std::hint::black_box(parse_lsblk(std::hint::black_box(SMALL_FIXTURE)).unwrap());
-    });
-    assert_under("parse small_realistic", t, Duration::from_millis(2));
-}
-
-#[test]
-fn parse_256_disks_under_20ms() {
-    let json = large_fixture(256);
+fn walk_16_disks_under_50ms() {
+    let r = FakeRoot::new("budget16");
+    r.many_disks(16);
     let t = measure(50, || {
-        std::hint::black_box(parse_lsblk(std::hint::black_box(&json)).unwrap());
+        std::hint::black_box(get_devices_at(r.path()).unwrap());
     });
-    assert_under("parse 256 disks", t, Duration::from_millis(20));
+    assert_under("walk 16 disks", t, Duration::from_millis(50));
+}
+
+#[test]
+fn walk_256_disks_under_500ms() {
+    let r = FakeRoot::new("budget256");
+    r.many_disks(256);
+    let t = measure(5, || {
+        std::hint::black_box(get_devices_at(r.path()).unwrap());
+    });
+    assert_under("walk 256 disks", t, Duration::from_millis(500));
 }
 
 #[test]
 fn system_filter_256_under_200us() {
-    let parsed = parse_lsblk(&large_fixture(256)).unwrap();
+    let r = FakeRoot::new("budgetsys");
+    r.many_disks(256);
+    let parsed = get_devices_at(r.path()).unwrap();
     let t = measure(1000, || {
         std::hint::black_box(std::hint::black_box(&parsed).system());
     });
@@ -127,8 +93,9 @@ fn system_filter_256_under_200us() {
 
 #[test]
 fn find_anywhere_miss_256_under_200us() {
-    // full tree walk on a miss -- catches descendants() going allocation heavy
-    let parsed = parse_lsblk(&large_fixture(256)).unwrap();
+    let r = FakeRoot::new("budgetfind");
+    r.many_disks(256);
+    let parsed = get_devices_at(r.path()).unwrap();
     let t = measure(1000, || {
         std::hint::black_box(std::hint::black_box(&parsed).find_anywhere("zzz"));
     });

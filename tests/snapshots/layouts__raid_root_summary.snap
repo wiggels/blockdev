@@ -1,0 +1,19 @@
+---
+source: tests/layouts.rs
+expression: summary(&parsed)
+---
+[
+  "sda [disk] 8:0 size=480103981056 rm=false ro=false mounts=[] system=true",
+  "sda1 [part] 8:1 size=536870912 rm=false ro=false mounts=[] system=true",
+  "md0 [raid1] 9:0 size=535822336 rm=false ro=false mounts=[\"/boot\"] system=true",
+  "sda2 [part] 8:2 size=8589934592 rm=false ro=false mounts=[\"[SWAP]\"] system=true",
+  "sda3 [part] 8:3 size=470977175552 rm=false ro=false mounts=[] system=true",
+  "md1 [raid1] 9:1 size=470909550592 rm=false ro=false mounts=[\"/\"] system=true",
+  "sdb [disk] 8:16 size=480103981056 rm=false ro=false mounts=[] system=true",
+  "sdb1 [part] 8:17 size=536870912 rm=false ro=false mounts=[] system=true",
+  "md0 [raid1] 9:0 size=535822336 rm=false ro=false mounts=[\"/boot\"] system=true",
+  "sdb2 [part] 8:18 size=8589934592 rm=false ro=false mounts=[\"[SWAP]\"] system=true",
+  "sdb3 [part] 8:19 size=470977175552 rm=false ro=false mounts=[] system=true",
+  "md1 [raid1] 9:1 size=470909550592 rm=false ro=false mounts=[\"/\"] system=true",
+  "nvme0n1 [disk] 259:0 size=1920383410176 rm=false ro=false mounts=[\"/data\"] system=false"
+]

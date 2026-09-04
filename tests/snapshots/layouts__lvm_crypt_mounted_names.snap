@@ -1,0 +1,9 @@
+---
+source: tests/layouts.rs
+expression: mounted
+---
+[
+  "nvme0n1p1",
+  "vg0-root",
+  "vg0-swap"
+]
