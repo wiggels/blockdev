@@ -174,6 +174,7 @@ fn main() -> Result<(), blockdev::BlockDevError> {
 | Function | Description |
 |----------|-------------|
 | `get_devices()` | Execute `lsblk --json --bytes` and parse the output |
+| `get_devices_sysfs()` | Build the same tree from `/sys` and `/proc` directly, no `lsblk` process |
 | `parse_lsblk(json)` | Parse a JSON string from `lsblk` without executing the command |
 
 ### Types
@@ -267,6 +268,24 @@ intermediate `serde_json::Value`, and human-readable sizes like `447.1G` are
 computed with exact integer math instead of `f64`. On a 2024 laptop a
 realistic 10-disk `lsblk` dump parses in roughly 20 µs. Benchmark history is
 plotted at the repo's GitHub Pages site.
+
+That parse is not where a `get_devices()` call spends its time, though. The
+process spawn is: forking `lsblk` costs milliseconds, the JSON step
+microseconds. `get_devices_sysfs()` skips the spawn entirely and builds the
+same tree by reading `/sys` and `/proc` directly, the way `lsblk` itself
+does, which is about 5x faster end to end:
+
+```rust
+use blockdev::get_devices_sysfs;
+
+let devices = get_devices_sysfs()?;
+# Ok::<(), std::io::Error>(())
+```
+
+It follows `lsblk`'s default filtering rules and CI asserts it produces an
+identical result to `lsblk --json --bytes` on the same machine. See
+[docs/sysfs-backend.md](docs/sysfs-backend.md) for the investigation and
+what it does not cover.
 
 ### Regression detection
 

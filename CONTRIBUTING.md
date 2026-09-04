@@ -24,7 +24,9 @@ explicitly on the Linux job.
 ## Project layout
 
 ```txt
-src/lib.rs        The whole library -- types, deserializers, filters, get_devices.
+src/lib.rs        Types, deserializers, filters, get_devices (lsblk backend).
+src/sysfs.rs      get_devices_sysfs -- same tree straight from /sys and /proc.
+docs/             Design notes and investigations.
 tests/            Snapshot tests (insta) over real-shaped lsblk fixtures, perf budgets.
 benches/          Criterion regression benchmarks + the small.json fixture.
 .github/          CI, bench, release, audit, semver, coverage, dependabot configs.
