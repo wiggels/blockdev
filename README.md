@@ -262,10 +262,8 @@ platform. Only `get_devices()` needs a real `lsblk`.
 ## Performance
 
 Parsing is a single pass through `serde_json` straight into the typed structs.
-The `size` and `mountpoints` fields use direct serde visitors rather than an
-intermediate `serde_json::Value`, and human-readable sizes like `447.1G` are
-computed with exact integer math instead of `f64`. On a 2024 laptop a
-realistic 10-disk `lsblk` dump parses in roughly 20 µs.
+On a 2024 laptop a realistic 10-disk `lsblk` dump parses in tens of
+microseconds. Benchmark history is plotted at the repo's GitHub Pages site.
 
 ### Regression detection
 
