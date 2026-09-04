@@ -472,7 +472,8 @@ impl Identifiers {
                 // ID_MODEL and lsblk shows sysfs trimmed, so trim here too.
                 // labels keep their whitespace, that is user data
                 if key == "ID_MODEL_ENC" {
-                    v = v.trim_end().to_owned();
+                    let keep = v.trim_end().len();
+                    v.truncate(keep);
                 }
                 *slot = Some(v);
             }
