@@ -1,6 +1,6 @@
 [package]
 name = "blockdev"
-version = "0.5.0"
+version = "0.4.2"
 authors = ["Hunter Wigelsworth <wiggels@gmail.com>"]
 edition = "2024"
 rust-version = "1.85"
