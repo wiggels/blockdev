@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788556782536,
+  "lastUpdate": 1788557797001,
   "repoUrl": "https://github.com/wiggels/blockdev",
   "entries": {
     "Benchmark": [
@@ -419,6 +419,72 @@ window.BENCHMARK_DATA = {
             "name": "live/lsblk_spawn_reference",
             "value": 2687969,
             "range": "± 18341",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "wiggels@gmail.com",
+            "name": "Hunter Wigelsworth",
+            "username": "wiggels"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "48c5e4acf89cb54b32baf684eb5a84513c037a6d",
+          "message": "Merge pull request #5 from wiggels/device-identifiers\n\nfeat: add uuid, partuuid, fstype, label, partlabel, wwn, serial, model",
+          "timestamp": "2026-09-04T16:34:55-05:00",
+          "tree_id": "575563690d6d80c77d0130d2c46b0e8268657fee",
+          "url": "https://github.com/wiggels/blockdev/commit/48c5e4acf89cb54b32baf684eb5a84513c037a6d"
+        },
+        "date": 1788557796216,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "walk/disks/16",
+            "value": 325224,
+            "range": "± 10998",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "walk/disks/256",
+            "value": 5922346,
+            "range": "± 137999",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "filters/system_256",
+            "value": 2221,
+            "range": "± 63",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "filters/find_by_name_miss_256",
+            "value": 77,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "filters/find_anywhere_miss_256",
+            "value": 2276,
+            "range": "± 133",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "live/get_devices",
+            "value": 220065,
+            "range": "± 6693",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "live/lsblk_spawn_reference",
+            "value": 1331946,
+            "range": "± 54172",
             "unit": "ns/iter"
           }
         ]
