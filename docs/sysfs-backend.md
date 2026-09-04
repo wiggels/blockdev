@@ -55,6 +55,19 @@ From `lsblk-cmd/lsblk.c`, `devtree.c`, `mnt.c`, and `lib/sysfs.c`:
 - **Mountpoints**: every `/proc/self/mountinfo` line matching by `maj:min`
   or by source path (`/dev/<name>` or `/dev/mapper/<dm name>`), newest
   first, with octal escapes decoded. If none, `/proc/swaps` for `[SWAP]`.
+- **Identifiers**: `/run/udev/data/b<maj>:<min>` is udevd's database, one
+  `E:KEY=VALUE` line per property. The keys and their priority are lsblk's
+  `properties.c`: `ID_FS_UUID_ENC` (hex-unmangled) for `uuid`,
+  `ID_PART_ENTRY_UUID` for `partuuid`, `ID_FS_TYPE`, `ID_FS_LABEL_ENC`,
+  `ID_PART_ENTRY_NAME`, `ID_WWN_WITH_EXTENSION` then `ID_WWN`,
+  `SCSI_IDENT_SERIAL` then `ID_SCSI_SERIAL` then `ID_SERIAL_SHORT` then
+  `ID_SERIAL`, and `ID_MODEL`. `serial` and `model` are blanked on
+  partitions and on anything with slaves, as lsblk does. Fallbacks the
+  kernel provides without udev: `wwid` or `device/wwid` for `wwn`,
+  `device/serial` or the virtio `serial` for `serial`, `device/model`.
+  `fstype`, `uuid`, `partuuid`, and the labels have no sysfs source; getting
+  them without udev means reading superblocks like blkid, which this crate
+  does not do.
 - **Order**: everything sorted by `maj:min`, because `/sys` stopped being
   sorted in Linux 4.8 and lsblk sorts by default since.
 
@@ -88,5 +101,9 @@ not worth a dependency for the current numbers.
   (btrfs RAID, ZFS pools). lsblk has special-case grouping for these.
 - The `BLKROGET` ioctl fallback when the `ro` attribute is missing. Every
   kernel this crate can realistically run on has the attribute.
-- lsblk's udev and blkid property probing. None of those columns are in
-  `BlockDevice`.
+- blkid-style probing of device contents. Filesystem identifiers come from
+  the udev database only, so on a system without udev (minimal containers,
+  some initramfs environments) `uuid`, `partuuid`, `fstype`, `label`, and
+  `partlabel` are `None` even though lsblk with libblkid could report them.
+- The rest of lsblk's property columns (`PTTYPE`, `PARTTYPE`, `PARTFLAGS`,
+  `FSVER`, `REV`, ...). Easy to add from the same file if wanted.

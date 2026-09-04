@@ -1,0 +1,12 @@
+---
+source: tests/layouts.rs
+expression: identifiers(&parsed)
+---
+[
+  "nvme0n1 wwn=eui.00000000000000018ce38e03000ea3c9 serial=X9Y8Z7 model=KXG60ZNV1T02",
+  "nvme0n1p1 uuid=B1C2-D3E4 partuuid=9f8e7d6c-0001-0000-0000-000000000000 fstype=vfat partlabel=EFI System",
+  "nvme0n1p2 uuid=0c1e0c1e-0c1e-0c1e-0c1e-0c1e0c1e0c1e partuuid=9f8e7d6c-0002-0000-0000-000000000000 fstype=crypto_LUKS",
+  "cryptroot uuid=lvm2pv-uuid fstype=LVM2_member",
+  "vg0-root uuid=11111111-2222-3333-4444-555555555555 fstype=ext4",
+  "vg0-swap uuid=66666666-7777-8888-9999-000000000000 fstype=swap"
+]

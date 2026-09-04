@@ -11,6 +11,31 @@ mod common;
 use blockdev::{BlockDevice, BlockDevices, get_devices_at};
 use common::FakeRoot;
 
+/// identifiers per device, only for devices that have any
+fn identifiers(devices: &BlockDevices) -> Vec<String> {
+    let mut out = Vec::new();
+    for dev in devices.iter_all() {
+        let fields = [
+            ("uuid", &dev.uuid),
+            ("partuuid", &dev.partuuid),
+            ("fstype", &dev.fstype),
+            ("label", &dev.label),
+            ("partlabel", &dev.partlabel),
+            ("wwn", &dev.wwn),
+            ("serial", &dev.serial),
+            ("model", &dev.model),
+        ];
+        let set: Vec<String> = fields
+            .iter()
+            .filter_map(|(k, v)| v.as_ref().map(|v| format!("{k}={v}")))
+            .collect();
+        if !set.is_empty() {
+            out.push(format!("{} {}", dev.name, set.join(" ")));
+        }
+    }
+    out
+}
+
 /// compact summary that is stable across cosmetic struct changes
 fn summary(devices: &BlockDevices) -> Vec<String> {
     let mut out = Vec::new();
@@ -49,6 +74,55 @@ fn raid_root() -> FakeRoot {
         .holds("sda/sda3", "md1")
         .holds("sdb/sdb3", "md1")
         .device("nvme0n1", "259:0", 3_750_748_848)
+        .udev(
+            "8:0",
+            &[
+                ("ID_MODEL", "WDC_WD5000AAKX"),
+                ("ID_SERIAL_SHORT", "WD-WCC1A1"),
+                ("ID_WWN", "0x50014ee2b1a2c3d4"),
+            ],
+        )
+        .udev(
+            "8:16",
+            &[
+                ("ID_MODEL", "WDC_WD5000AAKX"),
+                ("ID_SERIAL_SHORT", "WD-WCC1A2"),
+                ("ID_WWN", "0x50014ee2b1a2c3d5"),
+            ],
+        )
+        .udev(
+            "8:1",
+            &[
+                ("ID_FS_TYPE", "linux_raid_member"),
+                ("ID_FS_UUID_ENC", "a1b2c3d4-e5f6-7890-abcd-ef1234567890"),
+                ("ID_PART_ENTRY_UUID", "11111111-01"),
+            ],
+        )
+        .udev(
+            "8:2",
+            &[
+                ("ID_FS_TYPE", "swap"),
+                ("ID_FS_UUID_ENC", "5a5a5a5a-1111-2222-3333-444444444444"),
+                ("ID_PART_ENTRY_UUID", "11111111-02"),
+            ],
+        )
+        .udev(
+            "9:1",
+            &[
+                ("ID_FS_TYPE", "ext4"),
+                ("ID_FS_UUID_ENC", "0f0f0f0f-aaaa-bbbb-cccc-dddddddddddd"),
+                ("ID_FS_LABEL_ENC", "root\\x20fs"),
+            ],
+        )
+        .udev(
+            "259:0",
+            &[
+                ("ID_MODEL", "Samsung SSD 980"),
+                ("ID_SERIAL_SHORT", "S4EVNX0N1"),
+                ("ID_FS_TYPE", "xfs"),
+                ("ID_FS_UUID_ENC", "deadbeef-0000-0000-0000-000000000000"),
+            ],
+        )
         .mounts(
             "25 1 9:1 / / rw,relatime - ext4 /dev/md1 rw\n\
              26 25 9:0 / /boot rw,relatime - ext4 /dev/md0 rw\n\
@@ -66,6 +140,7 @@ fn snapshot_raid_root() {
     let system: Vec<&str> = parsed.system_iter().map(|d| d.name.as_str()).collect();
     let non_system: Vec<&str> = parsed.non_system_iter().map(|d| d.name.as_str()).collect();
     insta::assert_json_snapshot!("raid_root_partition", (system, non_system));
+    insta::assert_json_snapshot!("raid_root_identifiers", identifiers(&parsed));
 }
 
 #[test]
@@ -86,6 +161,53 @@ fn snapshot_lvm_crypt() {
         .dm("dm-2", "253:2", 99_000_000, "vg0-swap", "LVM-def456")
         .holds("dm-0", "dm-1")
         .holds("dm-0", "dm-2")
+        .udev(
+            "259:0",
+            &[
+                ("ID_MODEL", "KXG60ZNV1T02"),
+                ("ID_SERIAL_SHORT", "X9Y8Z7"),
+                ("ID_WWN", "eui.00000000000000018ce38e03000ea3c9"),
+            ],
+        )
+        .udev(
+            "259:1",
+            &[
+                ("ID_FS_TYPE", "vfat"),
+                ("ID_FS_UUID_ENC", "B1C2-D3E4"),
+                ("ID_PART_ENTRY_UUID", "9f8e7d6c-0001-0000-0000-000000000000"),
+                ("ID_PART_ENTRY_NAME", "EFI\\x20System"),
+            ],
+        )
+        .udev(
+            "259:2",
+            &[
+                ("ID_FS_TYPE", "crypto_LUKS"),
+                ("ID_FS_UUID_ENC", "0c1e0c1e-0c1e-0c1e-0c1e-0c1e0c1e0c1e"),
+                ("ID_PART_ENTRY_UUID", "9f8e7d6c-0002-0000-0000-000000000000"),
+            ],
+        )
+        .udev(
+            "253:0",
+            &[
+                ("ID_FS_TYPE", "LVM2_member"),
+                ("ID_FS_UUID_ENC", "lvm2pv-uuid"),
+            ],
+        )
+        .udev(
+            "253:1",
+            &[
+                ("ID_FS_TYPE", "ext4"),
+                ("ID_FS_UUID_ENC", "11111111-2222-3333-4444-555555555555"),
+                ("ID_SERIAL", "ignored-on-lvm"),
+            ],
+        )
+        .udev(
+            "253:2",
+            &[
+                ("ID_FS_TYPE", "swap"),
+                ("ID_FS_UUID_ENC", "66666666-7777-8888-9999-000000000000"),
+            ],
+        )
         .mounts(
             "30 1 253:1 / / rw - ext4 /dev/mapper/vg0-root rw\n\
              31 30 259:1 / /boot/efi rw - vfat /dev/nvme0n1p1 rw\n",
@@ -99,6 +221,15 @@ fn snapshot_lvm_crypt() {
         .map(|d| d.name.as_str())
         .collect();
     insta::assert_json_snapshot!("lvm_crypt_mounted_names", mounted);
+    insta::assert_json_snapshot!("lvm_crypt_identifiers", identifiers(&parsed));
+
+    // the issue #1 use case: find a partition by its uuid, not its name
+    let by_uuid = parsed
+        .iter_all()
+        .find(|d| d.uuid.as_deref() == Some("B1C2-D3E4"))
+        .expect("efi partition by uuid");
+    assert_eq!(by_uuid.name, "nvme0n1p1");
+    assert_eq!(by_uuid.fstype.as_deref(), Some("vfat"));
 }
 
 #[test]

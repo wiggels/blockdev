@@ -14,6 +14,11 @@
 //! * mountpoints come from `/proc/self/mountinfo` matched by maj:min or by
 //!   source path, newest first, then `/proc/swaps`
 //! * everything sorted by maj:min like lsblk has done since linux 4.8
+//! * identifiers -- uuid, partuuid, fstype, label, partlabel, wwn, serial,
+//!   model -- come from udev's db at `/run/udev/data/b<maj>:<min>` with the
+//!   same key priority lsblk uses via libudev, then sysfs for serial, model
+//!   and wwn. fstype/uuid/partuuid need udev -- reading them otherwise means
+//!   probing the device like blkid does, which this crate does not do
 //!
 //! not covered -- and not needed for the current `BlockDevice` shape:
 //! multi device fs groups -- btrfs raid, zfs pools -- where only one member
@@ -44,6 +49,7 @@ pub(crate) fn walk(root: &Path) -> Result<BlockDevices, BlockDevError> {
 
     let walker = Walker {
         class_block: root.join("sys/class/block"),
+        udev_data: root.join("run/udev/data"),
         mounts: MountTable::load(root)?,
     };
 
@@ -65,6 +71,7 @@ pub(crate) fn walk(root: &Path) -> Result<BlockDevices, BlockDevError> {
 
 struct Walker {
     class_block: PathBuf,
+    udev_data: PathBuf,
     mounts: MountTable,
 }
 
@@ -133,6 +140,10 @@ impl Walker {
             .mounts
             .lookup(maj_min, &name, kname, mapper_path.as_deref());
 
+        // serial and model are whole-disk things -- lsblk blanks them on
+        // partitions and on anything w/ slaves, and only roots have neither
+        let ids = self.identifiers(maj_min, dir, matches!(via, Root));
+
         let mut children = Vec::new();
         if depth < MAX_DEPTH {
             let me = Parent {
@@ -155,7 +166,47 @@ impl Walker {
             device_type,
             mountpoints,
             children,
+            uuid: ids.uuid,
+            partuuid: ids.partuuid,
+            fstype: ids.fstype,
+            label: ids.label,
+            partlabel: ids.partlabel,
+            wwn: ids.wwn,
+            serial: ids.serial,
+            model: ids.model,
         }
+    }
+
+    /// udev db first -- same keys and priority as lsblk's properties.c --
+    /// then sysfs attributes for what the kernel exposes on its own
+    fn identifiers(&self, maj_min: MajMin, dir: &Path, whole_disk: bool) -> Identifiers {
+        let mut ids = Identifiers::from_udev_db(
+            &self
+                .udev_data
+                .join(format!("b{}:{}", maj_min.major, maj_min.minor)),
+        );
+        if ids.wwn.is_none() {
+            // nvme puts wwid on the block dir, scsi under device/
+            ids.wwn = read_trimmed(&dir.join("wwid"))
+                .or_else(|| read_trimmed(&dir.join("device/wwid")))
+                .filter(|s| !s.is_empty());
+        }
+        if whole_disk {
+            if ids.serial.is_none() {
+                // device/serial is what lsblk reads. virtio-blk exposes it as
+                // a plain `serial` on the block dir instead
+                ids.serial = read_trimmed(&dir.join("device/serial"))
+                    .or_else(|| read_trimmed(&dir.join("serial")))
+                    .filter(|s| !s.is_empty());
+            }
+            if ids.model.is_none() {
+                ids.model = read_trimmed(&dir.join("device/model")).filter(|s| !s.is_empty());
+            }
+        } else {
+            ids.serial = None;
+            ids.model = None;
+        }
+        ids
     }
 
     /// partitions live as subdirs of the whole disk dir
@@ -282,6 +333,124 @@ fn dm_name_path(kname: &str, dir: &Path) -> Option<String> {
     } else {
         None
     }
+}
+
+// ---------------------------------------------------------------------------
+// identifiers -- udev db parsing
+// ---------------------------------------------------------------------------
+
+#[derive(Default)]
+struct Identifiers {
+    uuid: Option<String>,
+    partuuid: Option<String>,
+    fstype: Option<String>,
+    label: Option<String>,
+    partlabel: Option<String>,
+    wwn: Option<String>,
+    serial: Option<String>,
+    model: Option<String>,
+}
+
+impl Identifiers {
+    /// `/run/udev/data/b<maj>:<min>` -- one `E:KEY=VALUE` line per property.
+    /// missing file just means no udev, not an error. key priority is
+    /// lsblk's: first match wins, and the _ENC variants are hex mangled
+    fn from_udev_db(path: &Path) -> Self {
+        let mut ids = Self::default();
+        let Ok(db) = fs::read_to_string(path) else {
+            return ids;
+        };
+        // plain fallbacks only apply if the _ENC form never showed up
+        let (mut uuid_plain, mut label_plain) = (None, None);
+        // serial keys are ranked not first-wins since file order is arbitrary
+        let mut serial_rank = u8::MAX;
+        for line in db.lines() {
+            let Some(kv) = line.strip_prefix("E:") else {
+                continue;
+            };
+            let Some((key, value)) = kv.split_once('=') else {
+                continue;
+            };
+            if value.is_empty() {
+                continue;
+            }
+            let slot = match key {
+                "ID_FS_UUID_ENC" => &mut ids.uuid,
+                "ID_FS_UUID" => &mut uuid_plain,
+                "ID_FS_LABEL_ENC" => &mut ids.label,
+                "ID_FS_LABEL" => &mut label_plain,
+                "ID_PART_ENTRY_NAME" => &mut ids.partlabel,
+                "ID_PART_ENTRY_UUID" => &mut ids.partuuid,
+                "ID_FS_TYPE" => &mut ids.fstype,
+                "ID_MODEL" => &mut ids.model,
+                // WITH_EXTENSION wins over ID_WWN whichever comes first
+                "ID_WWN_WITH_EXTENSION" => {
+                    ids.wwn = Some(value.to_owned());
+                    continue;
+                }
+                "ID_WWN" => &mut ids.wwn,
+                // sg3_utils, then scsi, then the generic ones -- lsblk order.
+                // file order is not priority order so rank instead of first-wins
+                "SCSI_IDENT_SERIAL" | "ID_SCSI_SERIAL" | "ID_SERIAL_SHORT" | "ID_SERIAL" => {
+                    let rank = match key {
+                        "SCSI_IDENT_SERIAL" => 0,
+                        "ID_SCSI_SERIAL" => 1,
+                        "ID_SERIAL_SHORT" => 2,
+                        _ => 3,
+                    };
+                    if rank < serial_rank {
+                        serial_rank = rank;
+                        ids.serial = Some(value.to_owned());
+                    }
+                    continue;
+                }
+                _ => continue,
+            };
+            if slot.is_none() {
+                let mangled = matches!(
+                    key,
+                    "ID_FS_UUID_ENC" | "ID_FS_LABEL_ENC" | "ID_PART_ENTRY_NAME"
+                );
+                *slot = Some(if mangled {
+                    unhexmangle(value)
+                } else {
+                    value.to_owned()
+                });
+            }
+        }
+        if ids.uuid.is_none() {
+            ids.uuid = uuid_plain;
+        }
+        if ids.label.is_none() {
+            ids.label = label_plain;
+        }
+        ids
+    }
+}
+
+/// udev escapes non ascii and spaces in the _ENC properties as `\xNN`
+fn unhexmangle(s: &str) -> String {
+    if !s.contains("\\x") {
+        return s.to_owned();
+    }
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'\\' && i + 3 < b.len() && b[i + 1] == b'x' {
+            let hi = (b[i + 2] as char).to_digit(16);
+            let lo = (b[i + 3] as char).to_digit(16);
+            if let (Some(hi), Some(lo)) = (hi, lo) {
+                #[allow(clippy::cast_possible_truncation)]
+                out.push((hi * 16 + lo) as u8);
+                i += 4;
+                continue;
+            }
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 // ---------------------------------------------------------------------------
@@ -495,6 +664,33 @@ mod tests {
                 .dir(&format!("{base}/holders"))
         }
 
+        /// udev db entry for a maj:min -- `E:` lines like udevd writes
+        fn udev(&self, majmin: &str, props: &[(&str, &str)]) -> &Self {
+            let body = props.iter().fold(String::new(), |mut acc, (k, v)| {
+                use std::fmt::Write as _;
+                let _ = writeln!(acc, "E:{k}={v}");
+                acc
+            });
+            self.file(
+                &format!("run/udev/data/b{majmin}"),
+                &format!("I:123456\nS:disk/by-id/x\n{body}G:systemd\n"),
+            )
+        }
+
+        fn md(&self, name: &str, majmin: &str, sectors: u64, level: &str) -> &Self {
+            self.device(name, majmin, sectors).file(
+                &format!("sys/class/block/{name}/md/level"),
+                &format!("{level}\n"),
+            )
+        }
+
+        /// `holder` sits on top of `dev` -- dev may be a partition path
+        fn holds(&self, dev: &str, holder: &str) -> &Self {
+            let leaf = dev.rsplit('/').next().unwrap();
+            self.file(&format!("sys/class/block/{dev}/holders/{holder}"), "")
+                .file(&format!("sys/class/block/{holder}/slaves/{leaf}"), "")
+        }
+
         fn mounts(&self, mountinfo: &str, swaps: &str) -> &Self {
             self.file("proc/self/mountinfo", mountinfo).file(
                 "proc/swaps",
@@ -658,6 +854,116 @@ mod tests {
         // ! in sysfs names is / in /dev, and source path matching still works
         let cciss = devs.find_by_name("cciss/c0d0").unwrap();
         assert_eq!(cciss.mountpoints, ["/by/source"]);
+    }
+
+    #[test]
+    fn identifiers_from_udev_db_with_lsblk_priority() {
+        let r = FakeRoot::new("udev");
+        r.device("sda", "8:0", 1_000)
+            .part("sda", "sda1", "8:1", 900)
+            .udev(
+                "8:0",
+                &[
+                    ("ID_MODEL", "Samsung_SSD_870"),
+                    ("ID_SERIAL", "Samsung_SSD_870_S5ABC123"),
+                    ("ID_SERIAL_SHORT", "S5ABC123"),
+                    ("ID_WWN", "0x5002538f"),
+                    ("ID_WWN_WITH_EXTENSION", "0x5002538f00000000"),
+                    ("ID_PART_TABLE_TYPE", "gpt"),
+                ],
+            )
+            .udev(
+                "8:1",
+                &[
+                    ("ID_FS_UUID", "plain-should-lose"),
+                    ("ID_FS_UUID_ENC", "3f1a2b4c-0000-4000-8000-0000deadbeef"),
+                    ("ID_FS_LABEL_ENC", "My\\x20Data\\x21"),
+                    ("ID_FS_TYPE", "ext4"),
+                    ("ID_PART_ENTRY_UUID", "0a1b2c3d-01"),
+                    ("ID_PART_ENTRY_NAME", "root\\x20fs"),
+                    ("ID_SERIAL_SHORT", "should-be-dropped-on-partition"),
+                    ("ID_MODEL", "also-dropped"),
+                ],
+            )
+            .mounts("", "");
+        let devs = walk(r.path()).unwrap();
+        let sda = devs.find_by_name("sda").unwrap();
+        assert_eq!(sda.model.as_deref(), Some("Samsung_SSD_870"));
+        assert_eq!(
+            sda.serial.as_deref(),
+            Some("S5ABC123"),
+            "SHORT outranks ID_SERIAL"
+        );
+        assert_eq!(
+            sda.wwn.as_deref(),
+            Some("0x5002538f00000000"),
+            "WITH_EXTENSION wins"
+        );
+        assert!(sda.uuid.is_none() && sda.fstype.is_none());
+
+        let p = sda.find_child("sda1").unwrap();
+        assert_eq!(
+            p.uuid.as_deref(),
+            Some("3f1a2b4c-0000-4000-8000-0000deadbeef")
+        );
+        assert_eq!(p.label.as_deref(), Some("My Data!"));
+        assert_eq!(p.partlabel.as_deref(), Some("root fs"));
+        assert_eq!(p.fstype.as_deref(), Some("ext4"));
+        assert_eq!(p.partuuid.as_deref(), Some("0a1b2c3d-01"));
+        assert!(p.serial.is_none(), "partitions never carry serial");
+        assert!(p.model.is_none());
+    }
+
+    #[test]
+    fn identifiers_fall_back_to_sysfs_without_udev() {
+        let r = FakeRoot::new("noudev");
+        r.device("vda", "254:0", 1_000)
+            .file("sys/class/block/vda/serial", "6466401619403\n")
+            .device("nvme0n1", "259:0", 1_000)
+            .file("sys/class/block/nvme0n1/wwid", "eui.0025385b91b4a1c2\n")
+            .file("sys/class/block/nvme0n1/device/serial", "S4EVNX0N123456\n")
+            .file(
+                "sys/class/block/nvme0n1/device/model",
+                "Samsung SSD 980 PRO 1TB\n",
+            )
+            .device("sda", "8:0", 1_000)
+            .file("sys/class/block/sda/device/wwid", "naa.5000c500a1b2c3d4\n")
+            .file("sys/class/block/sda/device/serial", "\n")
+            .md("md0", "9:0", 500, "raid1")
+            .holds("sda", "md0")
+            .file("sys/class/block/md0/device/serial", "never-read\n")
+            .mounts("", "");
+        let devs = walk(r.path()).unwrap();
+        let vda = devs.find_by_name("vda").unwrap();
+        assert_eq!(
+            vda.serial.as_deref(),
+            Some("6466401619403"),
+            "virtio block level serial"
+        );
+        assert!(vda.uuid.is_none() && vda.fstype.is_none() && vda.model.is_none());
+
+        let nvme = devs.find_by_name("nvme0n1").unwrap();
+        assert_eq!(nvme.wwn.as_deref(), Some("eui.0025385b91b4a1c2"));
+        assert_eq!(nvme.serial.as_deref(), Some("S4EVNX0N123456"));
+        assert_eq!(nvme.model.as_deref(), Some("Samsung SSD 980 PRO 1TB"));
+
+        let sda = devs.find_by_name("sda").unwrap();
+        assert_eq!(sda.wwn.as_deref(), Some("naa.5000c500a1b2c3d4"));
+        assert!(
+            sda.serial.is_none(),
+            "empty attribute is None not Some(\"\")"
+        );
+        let md0 = sda.find_child("md0").unwrap();
+        assert!(md0.serial.is_none(), "stacked devices never carry serial");
+    }
+
+    #[test]
+    fn udev_unhexmangle() {
+        assert_eq!(unhexmangle("plain"), "plain");
+        assert_eq!(unhexmangle("a\\x20b"), "a b");
+        assert_eq!(unhexmangle("\\xc3\\xa9t\\xc3\\xa9"), "été");
+        assert_eq!(unhexmangle("bad\\xzz"), "bad\\xzz");
+        assert_eq!(unhexmangle("trail\\x2"), "trail\\x2");
     }
 
     #[test]

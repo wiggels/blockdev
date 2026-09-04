@@ -94,6 +94,19 @@ impl FakeRoot {
         )
     }
 
+    /// udev db entry for a maj:min -- the `E:` lines udevd writes
+    pub fn udev(&self, majmin: &str, props: &[(&str, &str)]) -> &Self {
+        let body = props.iter().fold(String::new(), |mut acc, (k, v)| {
+            use std::fmt::Write as _;
+            let _ = writeln!(acc, "E:{k}={v}");
+            acc
+        });
+        self.file(
+            &format!("run/udev/data/b{majmin}"),
+            &format!("I:123456\nS:disk/by-id/x\n{body}G:systemd\n"),
+        )
+    }
+
     pub fn mounts(&self, mountinfo: &str, swaps: &str) -> &Self {
         self.file("proc/self/mountinfo", mountinfo).file(
             "proc/swaps",

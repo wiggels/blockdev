@@ -32,9 +32,25 @@ expression: json
               "mountpoints": [
                 "/boot"
               ],
-              "children": []
+              "children": [],
+              "uuid": null,
+              "partuuid": null,
+              "fstype": null,
+              "label": null,
+              "partlabel": null,
+              "wwn": null,
+              "serial": null,
+              "model": null
             }
-          ]
+          ],
+          "uuid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+          "partuuid": "11111111-01",
+          "fstype": "linux_raid_member",
+          "label": null,
+          "partlabel": null,
+          "wwn": null,
+          "serial": null,
+          "model": null
         },
         {
           "name": "sda2",
@@ -46,7 +62,15 @@ expression: json
           "mountpoints": [
             "[SWAP]"
           ],
-          "children": []
+          "children": [],
+          "uuid": "5a5a5a5a-1111-2222-3333-444444444444",
+          "partuuid": "11111111-02",
+          "fstype": "swap",
+          "label": null,
+          "partlabel": null,
+          "wwn": null,
+          "serial": null,
+          "model": null
         },
         {
           "name": "sda3",
@@ -67,11 +91,35 @@ expression: json
               "mountpoints": [
                 "/"
               ],
-              "children": []
+              "children": [],
+              "uuid": "0f0f0f0f-aaaa-bbbb-cccc-dddddddddddd",
+              "partuuid": null,
+              "fstype": "ext4",
+              "label": "root fs",
+              "partlabel": null,
+              "wwn": null,
+              "serial": null,
+              "model": null
             }
-          ]
+          ],
+          "uuid": null,
+          "partuuid": null,
+          "fstype": null,
+          "label": null,
+          "partlabel": null,
+          "wwn": null,
+          "serial": null,
+          "model": null
         }
-      ]
+      ],
+      "uuid": null,
+      "partuuid": null,
+      "fstype": null,
+      "label": null,
+      "partlabel": null,
+      "wwn": "0x50014ee2b1a2c3d4",
+      "serial": "WD-WCC1A1",
+      "model": "WDC_WD5000AAKX"
     },
     {
       "name": "sdb",
@@ -101,9 +149,25 @@ expression: json
               "mountpoints": [
                 "/boot"
               ],
-              "children": []
+              "children": [],
+              "uuid": null,
+              "partuuid": null,
+              "fstype": null,
+              "label": null,
+              "partlabel": null,
+              "wwn": null,
+              "serial": null,
+              "model": null
             }
-          ]
+          ],
+          "uuid": null,
+          "partuuid": null,
+          "fstype": null,
+          "label": null,
+          "partlabel": null,
+          "wwn": null,
+          "serial": null,
+          "model": null
         },
         {
           "name": "sdb2",
@@ -115,7 +179,15 @@ expression: json
           "mountpoints": [
             "[SWAP]"
           ],
-          "children": []
+          "children": [],
+          "uuid": null,
+          "partuuid": null,
+          "fstype": null,
+          "label": null,
+          "partlabel": null,
+          "wwn": null,
+          "serial": null,
+          "model": null
         },
         {
           "name": "sdb3",
@@ -136,11 +208,35 @@ expression: json
               "mountpoints": [
                 "/"
               ],
-              "children": []
+              "children": [],
+              "uuid": "0f0f0f0f-aaaa-bbbb-cccc-dddddddddddd",
+              "partuuid": null,
+              "fstype": "ext4",
+              "label": "root fs",
+              "partlabel": null,
+              "wwn": null,
+              "serial": null,
+              "model": null
             }
-          ]
+          ],
+          "uuid": null,
+          "partuuid": null,
+          "fstype": null,
+          "label": null,
+          "partlabel": null,
+          "wwn": null,
+          "serial": null,
+          "model": null
         }
-      ]
+      ],
+      "uuid": null,
+      "partuuid": null,
+      "fstype": null,
+      "label": null,
+      "partlabel": null,
+      "wwn": "0x50014ee2b1a2c3d5",
+      "serial": "WD-WCC1A2",
+      "model": "WDC_WD5000AAKX"
     },
     {
       "name": "nvme0n1",
@@ -152,7 +248,15 @@ expression: json
       "mountpoints": [
         "/data"
       ],
-      "children": []
+      "children": [],
+      "uuid": "deadbeef-0000-0000-0000-000000000000",
+      "partuuid": null,
+      "fstype": "xfs",
+      "label": null,
+      "partlabel": null,
+      "wwn": null,
+      "serial": "S4EVNX0N1",
+      "model": "Samsung SSD 980"
     }
   ]
 }

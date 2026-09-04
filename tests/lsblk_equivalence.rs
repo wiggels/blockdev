@@ -27,6 +27,14 @@ struct LsblkDev {
     mountpoints: Vec<Option<String>>,
     #[serde(default)]
     children: Vec<LsblkDev>,
+    uuid: Option<String>,
+    partuuid: Option<String>,
+    fstype: Option<String>,
+    label: Option<String>,
+    partlabel: Option<String>,
+    wwn: Option<String>,
+    serial: Option<String>,
+    model: Option<String>,
 }
 
 impl LsblkDev {
@@ -44,7 +52,29 @@ impl LsblkDev {
                 .into_iter()
                 .map(LsblkDev::into_blockdev)
                 .collect(),
+            uuid: self.uuid,
+            partuuid: self.partuuid,
+            fstype: self.fstype,
+            label: self.label,
+            partlabel: self.partlabel,
+            wwn: self.wwn,
+            serial: self.serial,
+            model: self.model,
         }
+    }
+}
+
+/// identifiers are compared only where lsblk has a value. lsblk gets them
+/// from libudev/libblkid, we get them from the udev db file plus sysfs, so
+/// where lsblk says null we may still know something -- virtio serial on a
+/// box without udev, say. where lsblk knows, we must agree
+fn blank_ids_where_lsblk_is_null(ours: &mut BlockDevice, theirs: &BlockDevice) {
+    macro_rules! align {
+        ($($f:ident),*) => { $( if theirs.$f.is_none() { ours.$f = None; } )* };
+    }
+    align!(uuid, partuuid, fstype, label, partlabel, wwn, serial, model);
+    for (o, t) in ours.children.iter_mut().zip(&theirs.children) {
+        blank_ids_where_lsblk_is_null(o, t);
     }
 }
 
@@ -52,7 +82,12 @@ impl LsblkDev {
 #[ignore = "requires a real /sys and the lsblk command"]
 fn walk_matches_lsblk() {
     let out = std::process::Command::new("lsblk")
-        .args(["--json", "--bytes"])
+        .args([
+            "--json",
+            "--bytes",
+            "-o",
+            "NAME,MAJ:MIN,RM,SIZE,RO,TYPE,MOUNTPOINTS,UUID,PARTUUID,FSTYPE,LABEL,PARTLABEL,WWN,SERIAL,MODEL",
+        ])
         .output()
         .expect("run lsblk");
     assert!(
@@ -69,6 +104,10 @@ fn walk_matches_lsblk() {
             .collect(),
     };
 
-    let via_walk = get_devices().expect("walk /sys");
+    let mut via_walk = get_devices().expect("walk /sys");
+    assert_eq!(via_walk.len(), via_lsblk.len(), "different root count");
+    for (o, t) in via_walk.devices.iter_mut().zip(&via_lsblk.devices) {
+        blank_ids_where_lsblk_is_null(o, t);
+    }
     assert_eq!(via_walk, via_lsblk, "walk disagrees with lsblk");
 }
