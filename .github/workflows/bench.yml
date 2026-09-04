@@ -83,8 +83,10 @@ jobs:
           git worktree remove --force "$tmpdir"
 
       - name: Run benchmarks
-        # bencher format emits `test ... bench:` lines the action reads directly
-        run: cargo bench --bench parse -- --output-format bencher | tee output.txt
+        # bencher format emits `test ... bench:` lines the action reads directly.
+        # e2e needs a real lsblk which ubuntu runners have -- it is the number
+        # a caller actually pays, parse is the part we control
+        run: cargo bench --bench parse --bench e2e -- --output-format bencher | tee output.txt
 
       - name: Store result and alert on regression
         uses: benchmark-action/github-action-benchmark@v1

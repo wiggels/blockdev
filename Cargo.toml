@@ -26,6 +26,10 @@ insta = { version = "1.40", features = ["json"] }
 name = "parse"
 harness = false
 
+[[bench]]
+name = "e2e"
+harness = false
+
 [profile.bench]
 lto = "thin"
 codegen-units = 1
