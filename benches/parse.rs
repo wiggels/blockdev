@@ -48,7 +48,9 @@ fn make_large_fixture(n_disks: usize) -> String {
 }
 
 fn make_size_string_fixture(n: usize) -> String {
-    let suffixes = ["500G", "3.5T", "8M", "1.7T", "894.3G", "447.1G", "19.1G", "488M"];
+    let suffixes = [
+        "500G", "3.5T", "8M", "1.7T", "894.3G", "447.1G", "19.1G", "488M",
+    ];
     let mut s = String::from("{\"blockdevices\":[");
     for i in 0..n {
         if i > 0 {
