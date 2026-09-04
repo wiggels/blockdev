@@ -279,6 +279,10 @@ Three layers of defense against perf regressions:
    runners vary 2 to 3x between machines. Pushes to main append to the
    history plotted at the repo's GitHub Pages site under `/dev/bench/` via
    [`benchmark-action/github-action-benchmark`](https://github.com/benchmark-action/github-action-benchmark).
+   That page has two sections: raw nanoseconds, which mostly track which
+   runner class a run landed on, and a normalized series where every bench
+   is divided by a fixed-work calibration bench from the same run. Read
+   the normalized one for code changes.
 
 3. **Local criterion baselines** (`benches/devices.rs`):
 

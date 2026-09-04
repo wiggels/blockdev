@@ -8,6 +8,10 @@
 //! * `live` -- `get_devices()` on the actual host, plus `lsblk --json --bytes`
 //!   spawned for reference so the pages graph keeps showing what the walk
 //!   saves. skipped where there is no /sys or no lsblk
+//! * `calib` -- fixed work that no code change touches. github runners come
+//!   in ~2x different speed classes so raw ns across runs is mostly which
+//!   machine you got. ci divides every bench by the matching calibration
+//!   from the same run and publishes that ratio next to the raw numbers
 //!
 //! ```sh
 //! cargo bench --bench devices -- --save-baseline main
@@ -87,5 +91,41 @@ fn bench_live(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_walk, bench_filters, bench_live);
+/// fixed cost yardsticks -- these must never change. cpu for the in memory
+/// filters, syscall for the walk which is nothing but syscalls
+fn bench_calib(c: &mut Criterion) {
+    let mut group = c.benchmark_group("calib");
+
+    // fnv over 64k, ~50us of pure alu work
+    let buf: Vec<u8> = (0..65_536u32)
+        .map(|i| (i.wrapping_mul(2_654_435_761) >> 24) as u8)
+        .collect();
+    group.bench_function("cpu", |b| {
+        b.iter(|| {
+            let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+            for &byte in black_box(&buf) {
+                h ^= u64::from(byte);
+                h = h.wrapping_mul(0x0100_0000_01b3);
+            }
+            h
+        });
+    });
+
+    // 64 stats of one file -- same kind of work as the walk, none of the
+    // walk's code
+    let r = FakeRoot::new("calib");
+    r.file("sys/block/x", "");
+    let p = r.path().join("sys/block/x");
+    group.bench_function("syscall", |b| {
+        b.iter(|| {
+            for _ in 0..64 {
+                black_box(std::fs::metadata(black_box(&p)).is_ok());
+            }
+        });
+    });
+
+    group.finish();
+}
+
+criterion_group!(benches, bench_calib, bench_walk, bench_filters, bench_live);
 criterion_main!(benches);
