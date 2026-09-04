@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788557797001,
+  "lastUpdate": 1788558238278,
   "repoUrl": "https://github.com/wiggels/blockdev",
   "entries": {
     "Benchmark": [
@@ -485,6 +485,72 @@ window.BENCHMARK_DATA = {
             "name": "live/lsblk_spawn_reference",
             "value": 1331946,
             "range": "± 54172",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "wiggels@gmail.com",
+            "name": "Hunter Wigelsworth",
+            "username": "wiggels"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cce07d74cccad560166408888865f4bd21d5c3fb",
+          "message": "Merge pull request #13 from wiggels/fix-model-padding\n\nfix: trim the space padded model string from ID_MODEL_ENC",
+          "timestamp": "2026-09-04T16:42:21-05:00",
+          "tree_id": "4d2dabda8f2b9ec22d400f02cce08c3896f46782",
+          "url": "https://github.com/wiggels/blockdev/commit/cce07d74cccad560166408888865f4bd21d5c3fb"
+        },
+        "date": 1788558237613,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "walk/disks/16",
+            "value": 402603,
+            "range": "± 8343",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "walk/disks/256",
+            "value": 6976832,
+            "range": "± 102118",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "filters/system_256",
+            "value": 2989,
+            "range": "± 109",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "filters/find_by_name_miss_256",
+            "value": 144,
+            "range": "± 5",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "filters/find_anywhere_miss_256",
+            "value": 2727,
+            "range": "± 37",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "live/get_devices",
+            "value": 271724,
+            "range": "± 3760",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "live/lsblk_spawn_reference",
+            "value": 1573462,
+            "range": "± 51581",
             "unit": "ns/iter"
           }
         ]
