@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+  # incremental costs more than it saves w/ cold caches
+  CARGO_INCREMENTAL: "0"
+  # backtraces in logs so a panic is diagnosable without a rerun
+  RUST_BACKTRACE: "1"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # test matrix -- stable on linux + macos, one beta job for early breakage
+  # get_devices shells out to lsblk which is linux only, but parse_lsblk and
+  # the rest of the api are pure so macos still exercises everything that
+  # matters. the lsblk test is #[ignore] anyway
+  # ---------------------------------------------------------------------------
+  test:
+    name: test (${{ matrix.os }}, ${{ matrix.rust }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        rust: [stable]
+        include:
+          - os: ubuntu-latest
+            rust: beta
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo build
+        run: cargo build --all-targets --locked
+      - name: cargo test (debug)
+        run: cargo test --all-targets --locked
+      # perf budgets are wall clock -- run them in release where the budgets
+      # were measured. linux only, macos runners have different absolute
+      # timings and would need their own numbers
+      - name: cargo test --release (perf budgets, linux only)
+        if: matrix.os == 'ubuntu-latest' && matrix.rust == 'stable'
+        run: cargo test --release --test perf_budgets -- --nocapture
+      # the real lsblk smoke test -- only place we actually have lsblk
+      - name: cargo test -- --ignored (lsblk smoke, linux only)
+        if: matrix.os == 'ubuntu-latest' && matrix.rust == 'stable'
+        run: cargo test --lib --locked -- --ignored test_get_devices
+
+  # ---------------------------------------------------------------------------
+  # msrv -- keep building on the version we advertise in Cargo.toml
+  # ---------------------------------------------------------------------------
+  msrv:
+    name: MSRV (1.85)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.85"
+      - uses: Swatinem/rust-cache@v2
+      # build only, not test -- dev deps like criterion/insta may need newer
+      # than msrv and that is fine. the lib itself and its runtime deps must
+      # stay buildable
+      - run: cargo build --locked
+
+  # ---------------------------------------------------------------------------
+  # lints
+  # ---------------------------------------------------------------------------
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      # pedantic on purpose -- the lib is small enough to keep it clean
+      - run: cargo clippy --all-targets --locked -- -D warnings -W clippy::pedantic
+
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all --check
+
+  # ---------------------------------------------------------------------------
+  # docs -- -D warnings so a broken intra-doc link fails ci
+  # ---------------------------------------------------------------------------
+  docs:
+    name: docs
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo doc --no-deps --locked --all-features
+
+  # ---------------------------------------------------------------------------
+  # publish dry run -- catches "this will not actually publish" before the
+  # release workflow finds out the hard way
+  # ---------------------------------------------------------------------------
+  publish-dry-run:
+    name: cargo publish --dry-run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo publish --dry-run --locked
+
+  # ---------------------------------------------------------------------------
+  # gate -- single required check for branch protection
+  # ---------------------------------------------------------------------------
+  all-checks:
+    name: all checks
+    if: always()
+    needs: [test, msrv, clippy, fmt, docs, publish-dry-run]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all checks passed
+        run: |
+          if [ "${{ needs.test.result }}" != "success" ] \
+            || [ "${{ needs.msrv.result }}" != "success" ] \
+            || [ "${{ needs.clippy.result }}" != "success" ] \
+            || [ "${{ needs.fmt.result }}" != "success" ] \
+            || [ "${{ needs.docs.result }}" != "success" ] \
+            || [ "${{ needs.publish-dry-run.result }}" != "success" ]; then
+            echo "One or more checks failed."
+            exit 1
+          fi
+          echo "All checks passed."

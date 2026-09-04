@@ -1,0 +1,106 @@
+name: Benchmarks
+
+# runs cargo bench on every pr and every push to main, feeds the criterion
+# output through github-action-benchmark, and:
+#
+# * on main pushes: appends the result to the history on the gh-pages branch
+#   under /dev/bench/ -- the pages site for this repo plots it over time
+#
+# * on prs: comments with the relative change vs the last main result and
+#   fails the check if anything regressed past the threshold so it cannot
+#   merge silently
+#
+# ## one time setup
+#
+# 1. the first push run self-bootstraps gh-pages -- the action itself does
+#    not create the branch and dies with "could not find remote ref gh-pages"
+#    without it
+# 2. settings -> pages -> source gh-pages. before or after first run, either
+#    works
+# 3. settings -> actions -> general -> workflow permissions -> read and write
+#    so GITHUB_TOKEN can push gh-pages
+# 4. pr runs only alert, they never push -- so fork prs fail safe
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  deployments: write
+
+# only the latest run per ref matters
+concurrency:
+  group: bench-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bench:
+    name: Run criterion benches + regression check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # orphan gh-pages on first run so the action has somewhere to push.
+      # no-op after that. skipped on prs since they do not push
+      - name: Bootstrap gh-pages branch (first run only)
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            echo "gh-pages already exists -- nothing to bootstrap."
+            exit 0
+          fi
+          echo "gh-pages not found -- creating empty orphan branch."
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # orphan branch in a separate worktree so the bench step still has
+          # the source tree
+          tmpdir="$(mktemp -d)"
+          git worktree add --detach "$tmpdir"
+          (
+            cd "$tmpdir"
+            git checkout --orphan gh-pages
+            git rm -rf . >/dev/null 2>&1 || true
+            cat > index.html <<'HTML'
+          <!doctype html>
+          <meta charset="utf-8">
+          <title>blockdev benchmarks</title>
+          <p>Benchmark history is published under
+          <a href="./dev/bench/">/dev/bench/</a>.</p>
+          HTML
+            git add index.html
+            git commit -m "ci: bootstrap gh-pages for benchmark history"
+            git push origin gh-pages
+          )
+          git worktree remove --force "$tmpdir"
+
+      - name: Run benchmarks
+        # bencher format emits `test ... bench:` lines the action reads directly
+        run: cargo bench --bench parse -- --output-format bencher | tee output.txt
+
+      - name: Store result and alert on regression
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: cargo
+          output-file-path: output.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # prs alert only, main pushes history
+          auto-push: ${{ github.event_name == 'push' }}
+          # 125 = fail if anything is >25% slower than baseline. shared
+          # runners drift +-20% between runs so anything tighter flakes.
+          # lower it on dedicated runners
+          alert-threshold: '125%'
+          comment-on-alert: true
+          fail-on-alert: true
+          # annotate the commit so the regression shows in checks even when
+          # the bot cannot comment -- fork prs
+          alert-comment-cc-users: '@${{ github.actor }}'
+          summary-always: true
