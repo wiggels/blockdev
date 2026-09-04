@@ -272,11 +272,12 @@ Three layers of defense against perf regressions:
    cargo test --release --test perf_budgets -- --nocapture
    ```
 
-2. **CI-side benchmark comparison** (`.github/workflows/bench.yml`) -- runs
-   `cargo bench` on every PR against a deterministic fake sysroot, compares
-   with the `main` baseline stored on the `gh-pages` branch, and **fails the
-   build** if anything regresses by more than 25%. History is plotted at the
-   repo's GitHub Pages site under `/dev/bench/`. Powered by
+2. **CI-side benchmark gate** (`.github/workflows/bench.yml`) -- on every
+   PR, benches the merge base and then the PR head back to back on the same
+   runner over a deterministic fake sysroot, and **fails the build** if
+   anything is more than 25% slower. Same-runner A/B because GitHub-hosted
+   runners vary 2 to 3x between machines. Pushes to main append to the
+   history plotted at the repo's GitHub Pages site under `/dev/bench/` via
    [`benchmark-action/github-action-benchmark`](https://github.com/benchmark-action/github-action-benchmark).
 
 3. **Local criterion baselines** (`benches/devices.rs`):

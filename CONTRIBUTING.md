@@ -102,9 +102,9 @@ The repo has three layers of perf regression defense:
    a live walk. Run locally with
    `cargo bench --bench devices -- --save-baseline main` before changes,
    then `cargo bench --bench devices -- --baseline main` after to compare.
-3. **CI bench workflow** -- runs against `main` on every PR and fails the
-   build if anything regresses by more than 25%. History is published to
-   GitHub Pages.
+3. **CI bench workflow** -- benches the merge base and the PR head on the
+   same runner and fails the build if anything is more than 25% slower.
+   Pushes to main publish history to GitHub Pages.
 
 If you're optimising, please include before/after criterion output in the
 PR description.
