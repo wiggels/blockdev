@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788581423163,
+  "lastUpdate": 1788581425112,
   "repoUrl": "https://github.com/wiggels/blockdev",
   "entries": {
     "Benchmark": [
@@ -981,6 +981,79 @@ window.BENCHMARK_DATA = {
             "range": "± 0.4148",
             "unit": "x calib/syscall",
             "extra": "raw 2,933,909 ns/iter, calib/syscall 110,617 ns/iter on this runner"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "wiggels@gmail.com",
+            "name": "Hunter Wigelsworth",
+            "username": "wiggels"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "37096c0813a62e20810a5f38631774b3b2645d05",
+          "message": "Merge pull request #18 from wiggels/release-plz-2026-09-04T22-25-38Z",
+          "timestamp": "2026-09-04T23:08:20-05:00",
+          "tree_id": "d494d50ddf1d36dd1b2801019d2133453b13feb3",
+          "url": "https://github.com/wiggels/blockdev/commit/37096c0813a62e20810a5f38631774b3b2645d05"
+        },
+        "date": 1788581424509,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "walk/disks/16",
+            "value": 10.164,
+            "range": "± 0.0762",
+            "unit": "x calib/syscall",
+            "extra": "raw 1,041,727 ns/iter, calib/syscall 102,492 ns/iter on this runner"
+          },
+          {
+            "name": "walk/disks/256",
+            "value": 161.8936,
+            "range": "± 4.6574",
+            "unit": "x calib/syscall",
+            "extra": "raw 16,592,799 ns/iter, calib/syscall 102,492 ns/iter on this runner"
+          },
+          {
+            "name": "filters/system_256",
+            "value": 0.0457,
+            "range": "± 0.0004",
+            "unit": "x calib/cpu",
+            "extra": "raw 3,723 ns/iter, calib/cpu 81,532 ns/iter on this runner"
+          },
+          {
+            "name": "filters/find_by_name_miss_256",
+            "value": 0.0011,
+            "range": "± 0",
+            "unit": "x calib/cpu",
+            "extra": "raw 90 ns/iter, calib/cpu 81,532 ns/iter on this runner"
+          },
+          {
+            "name": "filters/find_anywhere_miss_256",
+            "value": 0.0432,
+            "range": "± 0.0002",
+            "unit": "x calib/cpu",
+            "extra": "raw 3,521 ns/iter, calib/cpu 81,532 ns/iter on this runner"
+          },
+          {
+            "name": "live/get_devices",
+            "value": 6.8201,
+            "range": "± 0.0325",
+            "unit": "x calib/syscall",
+            "extra": "raw 699,008 ns/iter, calib/syscall 102,492 ns/iter on this runner"
+          },
+          {
+            "name": "live/lsblk_spawn_reference",
+            "value": 25.8709,
+            "range": "± 0.281",
+            "unit": "x calib/syscall",
+            "extra": "raw 2,651,559 ns/iter, calib/syscall 102,492 ns/iter on this runner"
           }
         ]
       }
