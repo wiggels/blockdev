@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788560824139,
+  "lastUpdate": 1788581423163,
   "repoUrl": "https://github.com/wiggels/blockdev",
   "entries": {
     "Benchmark": [
@@ -827,6 +827,84 @@ window.BENCHMARK_DATA = {
             "name": "live/lsblk_spawn_reference",
             "value": 2933909,
             "range": "± 45885",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "wiggels@gmail.com",
+            "name": "Hunter Wigelsworth",
+            "username": "wiggels"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "37096c0813a62e20810a5f38631774b3b2645d05",
+          "message": "Merge pull request #18 from wiggels/release-plz-2026-09-04T22-25-38Z",
+          "timestamp": "2026-09-04T23:08:20-05:00",
+          "tree_id": "d494d50ddf1d36dd1b2801019d2133453b13feb3",
+          "url": "https://github.com/wiggels/blockdev/commit/37096c0813a62e20810a5f38631774b3b2645d05"
+        },
+        "date": 1788581422388,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "calib/cpu",
+            "value": 81532,
+            "range": "± 2106",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "calib/syscall",
+            "value": 102492,
+            "range": "± 412",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "walk/disks/16",
+            "value": 1041727,
+            "range": "± 7812",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "walk/disks/256",
+            "value": 16592799,
+            "range": "± 477346",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "filters/system_256",
+            "value": 3723,
+            "range": "± 31",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "filters/find_by_name_miss_256",
+            "value": 90,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "filters/find_anywhere_miss_256",
+            "value": 3521,
+            "range": "± 13",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "live/get_devices",
+            "value": 699008,
+            "range": "± 3334",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "live/lsblk_spawn_reference",
+            "value": 2651559,
+            "range": "± 28800",
             "unit": "ns/iter"
           }
         ]
